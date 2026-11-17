@@ -158,6 +158,26 @@ input[type=checkbox]{accent-color:var(--amber);width:15px;height:15px}
 .card{padding:14px 16px 12px;min-width:0;animation:fade .6s ease both}
 .card.wide{grid-column:1/-1}
 .card[hidden]{display:none}
+/* Info je Bericht – wie das „i“ im Kontor: erscheint beim Darüberfahren über die Karte */
+.info-i{position:relative;display:inline-block;vertical-align:2px;margin-left:9px;font-size:0;line-height:0}
+.info-btn{width:20px;height:20px;padding:0;border-radius:50%;border:1px solid var(--line-strong);background:var(--glass);
+  color:var(--text-2);font:italic 600 11.5px/1 var(--display);cursor:help;opacity:0;transform:scale(.85);
+  transition:opacity var(--t-s),transform var(--t-s) var(--kurve),border-color var(--t-s),color var(--t-s)}
+.card:hover .info-btn,.info-btn:focus-visible,.info-i.offen .info-btn{opacity:1;transform:none}
+.info-btn:hover,.info-i.offen .info-btn{border-color:var(--line-hi);color:var(--text)}
+.info-tip{position:absolute;left:-8px;top:calc(100% + 10px);z-index:40;width:max-content;max-width:min(420px,82vw);
+  display:grid;gap:7px;padding:12px 14px;border:1px solid var(--glass-edge);border-radius:13px;
+  background:var(--surface);box-shadow:var(--shadow-lg);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);
+  font:400 12px/1.45 var(--mono);letter-spacing:.01em;color:var(--text-2);text-align:left;white-space:normal;
+  opacity:0;visibility:hidden;transform:translateY(-4px);transition:opacity var(--t-s),transform var(--t-s),visibility 0s var(--t-s)}
+.info-tip span{display:flex;gap:12px}
+.info-tip i{font-style:normal;color:var(--text-3);width:82px;flex:none;text-transform:uppercase;font-size:9.5px;letter-spacing:.14em;padding-top:2px}
+.info-tip em{font-style:normal;color:var(--text)}
+.info-btn:hover + .info-tip,.info-btn:focus-visible + .info-tip,.info-i.offen .info-tip{opacity:1;visibility:visible;transform:none;transition:opacity var(--t-s),transform var(--t-s),visibility 0s}
+.card:hover,.card:has(.info-i.offen),.card:focus-within{z-index:6}
+.card.wide .info-tip{max-width:min(520px,82vw)}
+@media (hover:none){.info-btn{opacity:.55;transform:none}}
+
 .klapp{flex:none;width:26px;height:26px;margin:-2px 0 0 -4px;border-radius:100px;border:1px solid transparent;background:transparent;cursor:pointer;
   color:var(--text-3);display:grid;place-items:center;padding:0;transition:border-color var(--t-s),color var(--t-s),transform var(--t-m) var(--kurve)}
 .klapp svg{width:15px;height:15px}
@@ -1072,6 +1092,37 @@ function rQuality(c){
   c.tableOpen=true;
 }
 
+
+let infoLageSetzen=()=>{};
+/* ─── Info je Bericht: wie gerechnet wird (erscheint beim Darüberfahren) ─── */
+const sp=(k)=>{const m=CFG.map;return {iss:'Datei 1',wi:'Datei 2',bk:'Datei 3'}[k]};
+const issD=()=>FILT.issDate==='inj'?'Defekt-Injektions-Datum (Spalte '+CFG.map.iss.inj+', fehlt es: Submit)':'Submit-Datum (Spalte '+CFG.map.iss.submit+')';
+const planTxt=()=>'Summe Estimated Effort (Datei 1, Spalte '+CFG.map.iss.est+') der Issues, deren '+issD()+' im Zeitraum liegt.';
+const bookTxt=()=>'Gebuchter Aufwand (Datei 3, Spalte '+CFG.map.bk.val+'). '+(CFG.bkDup==='summe'?'Alle Zeilen einer ID werden summiert.':'Je Issue-ID zählt nur die erste Zeile.')+' Zeitpunkt: '+(CFG.map.bk.date?'Buchungsdatum (Spalte '+CFG.map.bk.date+').':'Datum des zugehörigen Issues, da die Datei kein Buchungsdatum hat.');
+const asgTxt=()=>'Assignee aus der jeweiligen Datei'+(CFG.map.bk.person?'; Buchungen zählen für die buchende Person (Spalte '+CFG.map.bk.person+').':'; Buchungen zählen für den Assignee des Issues.');
+const defTxt=()=>{const c=[...defCats()];return c.length?c.join(', '):'keine erkannt'};
+const offenTxt=()=>'Offen = Status weder „'+CFG.closed+'“ noch „'+CFG.canceled+'“.';
+const wiDTxt=()=>({actual:'Abschlussdatum (Spalte '+CFG.map.wi.actual+'), fehlt es: geplant, Start, Submit',submit:'Submit-Datum (Spalte '+CFG.map.wi.submit+')',start:'Start-Datum (Spalte '+CFG.map.wi.start+'), fehlt es: Submit',planned:'geplantes Datum (Spalte '+CFG.map.wi.planned+'), fehlt es: Submit'})[FILT.wiDate];
+const leadTxt=()=>'Abschlussdatum (Spalte '+CFG.map.wi.actual+') minus '+(LOCAL.leadBasis==='submit'?'Submit-Datum (Spalte '+CFG.map.wi.submit+')':'Start-Datum (Spalte '+CFG.map.wi.start+', fehlt es: Submit)')+', in Kalendertagen. Nur Workitems mit Status „'+CFG.closed+'“; negative Werte fallen weg.';
+const INFO={
+ issMon:()=>[['Geplant',planTxt()],['Abgerechnet',bookTxt()],['Ist/Plan','Abgerechnet ÷ geplant je Monat.'],['Filter','Jahr, Assignee. '+asgTxt()]],
+ defMon:()=>[['Auswahl','Nur Issues der Kategorie (Spalte '+CFG.map.iss.cat+'): '+defTxt()+'. Änderbar im Filter „Defekt-Kategorie“.'],['Geplant',planTxt()],['Abgerechnet',bookTxt()],['Filter','Jahr, Assignee.']],
+ issYear:()=>[['Rechnung','Wie die Monatsberichte, je Kalenderjahr zusammengefasst – gesamt und nur Defekte ('+defTxt()+').'],['Def.-Anteil','Abgerechnet Defekte ÷ abgerechnet gesamt.'],['Filter','Assignee. Zeigt immer alle Jahre.']],
+ issAsg:()=>[['Geplant','Estimated Effort der Issues je Assignee (Spalte '+CFG.map.iss.assignee+').'],['Abgerechnet',bookTxt()],['Zuordnung',asgTxt()],['Anzeige','Grafik: die 15 mit dem meisten abgerechneten Aufwand. Tabelle: alle.'],['Filter','Jahr, Assignee.']],
+ overrun:()=>[['Rechnung','Je Issue: gesamter abgerechneter Aufwand minus Estimated Effort. Positiv = überschritten.'],['Abgerechnet',bookTxt()],['Anzeige','Grafik: die 10 größten Überschreitungen. Tabelle: alle Issues mit Plan oder Ist.'],['Filter','Jahr (nach '+issD()+'), Assignee.']],
+ defLat:()=>[['Rechnung','Je Defekt: Submit-Datum (Spalte '+CFG.map.iss.submit+') minus Defekt-Injektions-Datum (Spalte '+CFG.map.iss.inj+'), in Kalendertagen.'],['Auswahl','Issues der Kategorie '+defTxt()+' mit beiden Daten; negative Abstände fallen weg.'],['Gruppe','Jahr des Submits. Je Jahr Durchschnitt, Median, 85-%-Wert und Maximum.'],['Filter','Assignee. Zeigt immer alle Jahre.']],
+ wiYear:()=>[['Rechnung','Summe Estimated Effort (Datei 2, Spalte '+CFG.map.wi.est+') je Jahr.'],['Jahr nach',wiDTxt()+'.'],['Aufteilung','Gesamt enthält closed, offene und canceled; die Tabelle zeigt sie getrennt.'],['Filter','Assignee, Workitem-Datum. Zeigt immer alle Jahre.']],
+ wiDept:()=>[['Rechnung','Anteil der Abteilung am Estimated Effort aller Workitems eines Jahres; canceled zählt nicht.'],['Abteilung',FILT.dept==='map'?'aus der Zuordnung Person → Abteilung unter Einstellungen.':'aus Spalte '+CFG.map.wi[FILT.dept]+' der Workitem-Datei.'],['Anzeige','Die 5 größten einzeln, der Rest als „Sonstige“.'],['Jahr nach',wiDTxt()+'.'],['Filter','Assignee.']],
+ wiAsg:()=>[['Rechnung','Estimated Effort je Assignee ÷ Estimated Effort aller gefilterten Workitems; canceled zählt nicht.'],['Jahr nach',wiDTxt()+'.'],['Filter','Jahr, Assignee.']],
+ onTime:()=>[['Auswahl','Workitems mit Status „'+CFG.closed+'“, Abschlussdatum und geplantem Datum.'],['Pünktlich','Abschlusstag ≤ geplanter Tag (Spalte '+CFG.map.wi.actual+' gegen '+CFG.map.wi.planned+').'],['Ø Verzug','Mittel der Tage über Plan, nur über die verspäteten.'],['Filter','Jahr (nach Abschluss), Assignee.']],
+ leadPrefix:()=>[['Rechnung',leadTxt()],['Präfix',prefixTxt()+'.'],['Werte','Ø Durchschnitt, Median (Mitte), Quartile 25–75 % (Balken), 85-%-Wert. min. n blendet seltene Präfixe aus.'],['Filter','Jahr (nach Abschluss), Assignee.']],
+ leadTrend:()=>[['Rechnung',leadTxt()],['Gruppe','Monat des Abschlusses; je Monat Median und Durchschnitt.'],['Filter','Präfix-Auswahl hier, Jahr, Assignee.']],
+ leadDist:()=>[['Rechnung',leadTxt()],['Gruppe','Anzahl Workitems je Zeitspanne in Tagen.'],['Filter','Präfix aus „Durchlaufzeit im Verlauf“, Jahr, Assignee.']],
+ forecast:()=>[['Offen',offenTxt()],['Aufwand','Summe Estimated Effort (Spalte '+CFG.map.wi.est+') der offenen Workitems je Assignee.'],['Kapazität','Wochenstunden × Horizont. Standard '+nf1.format(+CFG.weekly)+' h, je Person in der Tabelle änderbar.'],['Differenz','Kapazität − offener Aufwand; negativ = Überlast.'],['Reichweite','Offener Aufwand ÷ Wochenstunden, in Wochen.'],['Überfällig','Geplantes Datum vor heute.'],['Filter','Assignee. Der Jahresfilter gilt hier nicht.']],
+ quality:()=>[['Zweck','Zeigt, was beim Zusammenführen der drei Dateien nicht passt.'],['Abgleich','Buchung → Issue: erst exakt, '+(CFG.idMatch==='exakt'?'sonst keine Zuordnung.':'dann trotz Schreibweise (Groß/klein, Leer-/Sonderzeichen), zuletzt über eine eindeutige Nummer.')],['Doppelte IDs',CFG.bkDup==='summe'?'Alle Zeilen werden summiert.':'Nur die erste Zeile zählt, die übrigen stehen hier als „ignoriert“.']]
+};
+function infoHtml(id){const f=INFO[id];if(!f)return '';try{return f().map(([k,v])=>`<span><i>${esc(k)}</i><em>${esc(v)}</em></span>`).join('')}catch(e){return ''}}
+
 /* ─── Kennzahlen ───────────────────────────────────────────── */
 function renderKpis(){
   const dc=defCats();let n=0,p=0,b=0,db=0,dp=0;
@@ -1098,7 +1149,7 @@ function renderAll(){
   for(const r of REPORTS){
     if(r.grp!==last){if(last)html+='</div></section>';html+=`<section class="kat" data-g="${r.grp}" ${r.grp===AKT?'':'hidden'}><div class="gruppe"><h2>${GROUPS[r.grp][0]}</h2><p>${GROUPS[r.grp][1]}</p></div><div class="reports">`;last=r.grp}
     {const zu=ZU.has('c:'+r.id);html+=`<section class="card glass${r.wide?' wide':''}${zu?' zu':''}" data-r="${r.id}" ${HID.has(r.id)?'hidden':''}>
-      <div class="c-head"><button class="klapp" type="button" data-klapp="c:${r.id}" aria-expanded="${!zu}" aria-label="Bericht ein- oder ausklappen">${PFEIL}</button><div class="c-nm"><h3 data-klapp="c:${r.id}">${esc(r.title)}</h3><p class="c-sub"></p></div>
+      <div class="c-head"><button class="klapp" type="button" data-klapp="c:${r.id}" aria-expanded="${!zu}" aria-label="Bericht ein- oder ausklappen">${PFEIL}</button><div class="c-nm"><h3><span data-klapp="c:${r.id}">${esc(r.title)}</span><span class="info-i"><button type="button" class="info-btn" aria-label="So wird „${esc(r.title)}“ gerechnet" aria-expanded="false">i</button><span class="info-tip" role="tooltip"></span></span></h3><p class="c-sub"></p></div>
       <div class="c-tools"><span class="c-ctl" style="display:contents"></span><button class="pill sm" data-csv="${r.id}" type="button" title="Tabelle in die Zwischenablage (für Excel)">Kopieren</button><button class="x" data-hide="${r.id}" type="button" title="Ausblenden" aria-label="Bericht ausblenden">×</button></div></div>
       <div class="c-body"><div class="c-top"></div><div class="chart"></div><div class="c-tbl"></div></div></section>`;}
   }
@@ -1111,6 +1162,7 @@ function renderCard(r){
   const el=$(`[data-r="${r.id}"]`);if(!el)return;
   const c={id:r.id,el,chart:$('.chart',el),top:$('.c-top',el),ctl:$('.c-ctl',el),tableOpen:false,_t:'',table(h){this._t=h}};
   $('.c-sub',el).textContent=r.sub();
+  const tipEl=$('.info-tip',el);if(tipEl)tipEl.innerHTML=infoHtml(r.id);
   try{r.render(c)}catch(e){console.error(e);c.chart.innerHTML='<div class="empty">Fehler beim Berechnen: '+esc(e.message)+'</div>'}
   $$('select[data-l]',el).forEach(s=>s.value=String(LOCAL[s.dataset.l]));
   const open=OPEN.has(r.id)||(c.tableOpen&&!OPEN.has('!'+r.id));
@@ -1473,6 +1525,9 @@ function bind(){
     if(!e.target.closest('.ms'))$$('.ms-panel').forEach(x=>x.hidden=true);
     if(!e.target.closest('.ans-menue')){$('#ansPanel').hidden=true;$('#ansBtn').setAttribute('aria-expanded','false')}
     const h=e.target.closest('[data-hide]');if(h){setHidden(h.dataset.hide,true);toast('Ausgeblendet – über „Ansichten“ wieder einblenden')}
+    const ib=e.target.closest('.info-btn');
+    $$('.info-i.offen').forEach(x=>{if(!ib||x!==ib.parentElement){x.classList.remove('offen');x.querySelector('.info-btn').setAttribute('aria-expanded','false')}});
+    if(ib){const h=ib.parentElement,auf=!h.classList.contains('offen');infoLageSetzen(ib);h.classList.toggle('offen',auf);ib.setAttribute('aria-expanded',String(auf));return}
     const kl=e.target.closest('[data-klapp]');if(kl){klappen(kl.dataset.klapp);return}
     if(e.target.closest('.lg-bk'))bkUmschalten();
     const c=e.target.closest('[data-csv]');if(c)csv(c.dataset.csv);
@@ -1495,6 +1550,10 @@ function bind(){
     if(Math.abs(dx)<70||Math.abs(dx)<Math.abs(dy)*1.6)return;const n=Dock.active+(dx<0?1:-1);if(n>=0&&n<Dock.anzahl)Dock.gehe(n)},{passive:true});
   addEventListener('keydown',e=>{if($('#dock').hidden||e.target.closest('input,textarea,select,[contenteditable],#bead,dialog'))return;
     if(e.key==='ArrowRight'&&Dock.active<Dock.anzahl-1)Dock.gehe(Dock.active+1);else if(e.key==='ArrowLeft'&&Dock.active>0)Dock.gehe(Dock.active-1)});
+  // Info-Tooltip am Bildschirmrand nach innen schieben
+  infoLageSetzen=btn=>{const tip=btn.nextElementSibling;if(!tip)return;tip.style.left='-8px';const r=tip.getBoundingClientRect(),zu=r.right-(innerWidth-12);if(zu>0)tip.style.left=(-8-zu)+'px'};
+  document.addEventListener('pointerover',e=>{const b=e.target.closest?.('.info-btn');if(b)infoLageSetzen(b)});
+  document.addEventListener('focusin',e=>{const b=e.target.closest?.('.info-btn');if(b)infoLageSetzen(b)});
   // Tooltip
   const tipEl=$('#tip');
   const show=e=>{const t=e.target.closest?.('[data-tip]');if(!t){tipEl.classList.remove('on');return}const h=TIPS.get(t.dataset.tip);if(!h)return;tipEl.innerHTML=h;tipEl.classList.add('on');
