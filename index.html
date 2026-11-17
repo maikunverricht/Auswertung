@@ -207,6 +207,21 @@ input[type=checkbox]{accent-color:var(--amber);width:15px;height:15px}
 .legend .lg-bk{cursor:pointer;border-radius:6px;padding:0 4px;margin:0 -4px}
 .legend .lg-bk:hover{background:var(--film)}
 .legend .lg-bk.off{opacity:.45;text-decoration:line-through}
+.legend .lg-ser{cursor:pointer;border-radius:6px;padding:0 4px;margin:0 -4px}
+.legend .lg-ser:hover{background:var(--film)}
+.legend .lg-ser.off{opacity:.45;text-decoration:line-through}
+.chart [data-aus]{cursor:pointer}
+.chips{display:inline-flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 6px 0 10px;border-radius:100px;border:1px dashed var(--line-strong);background:var(--film);
+  font:500 12.5px var(--display);letter-spacing:0;text-transform:none;color:var(--text);cursor:pointer;transition:border-color var(--t-s)}
+.chip i{font:normal 9.5px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--text-3)}
+.chip b{display:grid;place-items:center;width:18px;height:18px;border-radius:50%;color:var(--text-3);font-weight:400}
+.chip:hover{border-color:var(--line-hi)}.chip:hover b{color:var(--text);background:var(--film)}
+.chip.alle{border-style:solid;padding:0 10px;color:var(--text-2)}
+.aus-pop{position:fixed;z-index:95;padding:6px;border-radius:14px;border:1px solid var(--glass-edge);background:var(--surface);box-shadow:var(--shadow-lg);
+  -webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px)}
+#tip .tip-hint{margin-top:6px;padding-top:5px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10.5px;color:var(--text-3)}
+#tip .tip-hint.top{margin:0 0 6px;padding:0 0 5px;border-top:0;border-bottom:1px solid var(--line)}
 .chart{width:100%;min-height:40px;position:relative}
 .chart svg{display:block;width:100%;overflow:visible}
 .chart text{font-family:var(--mono);font-size:10.5px;fill:var(--text-3)}
@@ -424,6 +439,7 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
     <span class="fl">Issue-Datum <select class="sel" id="fIssDate"><option value="submit">Submit</option><option value="inj">Defekt-Injektion</option></select></span>
     <span class="fl">Workitem-Datum <select class="sel" id="fWiDate"><option value="actual">Abschluss (actual)</option><option value="submit">Submit</option><option value="start">Start</option><option value="planned">Geplant</option></select></span>
     <span class="fl">Abteilung aus <select class="sel" id="fDept"><option value="klammer">Assignee (Klammer)</option><option value="map">Zuordnung Person</option><option value="sub">Subcategory</option><option value="projIss">Projekt-ID Issue</option><option value="projRel">Projekt-ID Release</option></select></span>
+    <span class="fl" id="fAus" hidden>Ausgeblendet <span id="fAusListe" class="chips"></span></span>
     <span class="fl">Anzeige <button class="pill sm on" id="fBk" type="button" aria-pressed="true" title="Abgerechneten Aufwand ein- oder ausblenden">Abgerechnet an</button></span>
     <span class="fl ms">Defekt-Kategorie <button class="sel" id="fCatBtn" type="button" style="min-width:120px;text-align:left">automatisch</button>
       <div class="ms-panel" id="fCatPanel" hidden></div></span>
@@ -471,6 +487,7 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
 <footer class="pf"><span>Auswertung · Werkbank Unverricht</span><span id="footInfo">Daten bleiben lokal im Browser</span></footer>
 
 <div id="tip" role="tooltip"></div>
+<div id="ausPop" class="aus-pop" hidden></div>
 <div class="toast" id="toast"></div>
 
 <dialog class="dlg" id="dlgSet">
@@ -537,6 +554,13 @@ let RAW=lsGet(LS.raw,{});
 let FILT=Object.assign({noBk:false,year:'all',asg:null,issDate:'submit',wiDate:'actual',dept:'klammer',cats:null},lsGet(LS.filt,{}));
 if(!FILT.deptV2){FILT.deptV2=1;if(FILT.dept==='map')FILT.dept='klammer'}   // seit 17.11.: Abteilung aus der Klammer im Assignee
 let HID=new Set(lsGet(LS.hid,[]));
+/* Ausgeblendete Einträge – fehlen in allen Berichten und Kennzahlen (nicht in „Prüfung“). */
+const AUS_ARTEN={iss:'Issue',asg:'Person',prefix:'Präfix',dept:'Abteilung'};
+let AUS=(()=>{const a=lsGet('wb-ausw-aus',{});const o={};for(const k in AUS_ARTEN)o[k]=new Set(Array.isArray(a[k])?a[k]:[]);return o})();
+const ausSichern=()=>lsSet('wb-ausw-aus',Object.fromEntries(Object.entries(AUS).map(([k,v])=>[k,[...v]])));
+const ausZahl=()=>Object.values(AUS).reduce((n,v)=>n+v.size,0);
+/* Ausgeblendete Datenreihen je Bericht: „bericht|reihe“ */
+let SERAUS=new Set(lsGet('wb-ausw-reihen',[]));let CUR='';
 let OPEN=new Set(lsGet(LS.open,[]));
 let ZU=new Set(lsGet(LS.zu,[]).filter(k=>!k.startsWith('g:')));
 let AKT=(()=>{try{return localStorage.getItem('wb-ausw-kat')||'issues'}catch(e){return 'issues'}})();
@@ -687,7 +711,8 @@ function build(){
   const addY=t=>t!=null&&years.add(new Date(t).getUTCFullYear());
   issues.forEach(i=>{addY(i.submit);addY(i.inj)});wis.forEach(w=>{addY(w.actual);addY(w.submit);addY(w.planned)});bks.forEach(b=>addY(b.date));
   const states={iss:countBy(issues,i=>i.state||'(leer)'),wi:countBy(wis,w=>w.state||'(leer)')};
-  D={dup:{iss:dupIss,bk:dupBk},dec:{iss:decIss,wi:decWi,bk:decBk},bkUnit,issues,wis,bks,byId,people:[...people].sort((a,b)=>a.localeCompare(b,'de')),cats,years:[...years].sort(),states};
+  D={full:{issues,wis,bks},dup:{iss:dupIss,bk:dupBk},dec:{iss:decIss,wi:decWi,bk:decBk},bkUnit,issues,wis,bks,byId,people:[...people].sort((a,b)=>a.localeCompare(b,'de')),cats,years:[...years].sort(),states};
+  sichten();
 }
 function prefixOf(src){
   const sep=CFG.prefixSep||'-',teile=String(src||'').split(sep);
@@ -695,6 +720,14 @@ function prefixOf(src){
   const p=teile.length>=2?teile[0].trim():'';return p||'(ohne Präfix)';
 }
 function prefixTxt(){const s=CFG.prefixSep||'-';return (CFG.prefixSrc==='id'?'ID':'Titel')+(+CFG.prefixPart===2?' zwischen 1. und 2. „'+s+'“':' bis zum ersten „'+s+'“')}
+function sichten(){
+  if(!D)return;const F=D.full;
+  const dOf=w=>FILT.dept==='klammer'||FILT.dept==='map'?deptName(w.assignee):w[FILT.dept];
+  D.issues=F.issues.filter(i=>!AUS.iss.has(i.id)&&!AUS.asg.has(i.assignee));
+  const ok=new Set(D.issues);
+  D.bks=F.bks.filter(b=>!(b.iss&&!ok.has(b.iss))&&!(b.person&&AUS.asg.has(b.person)));
+  D.wis=F.wis.filter(w=>!AUS.asg.has(w.assignee)&&!AUS.prefix.has(w.prefix)&&!AUS.dept.has(dOf(w)));
+}
 function countBy(arr,f){const m=new Map();for(const x of arr){const k=f(x);m.set(k,(m.get(k)||0)+1)}return m}
 
 /* ─── Filter-Helfer ────────────────────────────────────────── */
@@ -742,7 +775,11 @@ function issueMonthly(onlyDef){
 
 /* ─── Diagramme (SVG) ──────────────────────────────────────── */
 const TIPS=new Map();let tipN=0;
+const _tc=TIPS.clear.bind(TIPS);TIPS.clear=()=>{_tc();AUSZ.clear()};
 const tip=html=>{const k='t'+(++tipN);TIPS.set(k,html);return k};
+const AUSZ=new Map();let ausN=0;
+const ausAttr=a=>{if(!a||a[1]==null||a[1]==='')return '';const k='a'+(++ausN);AUSZ.set(k,a);return ` data-aus="${k}"`};
+const ausHint=a=>a&&a[1]!=null&&a[1]!==''?'<div class="tip-hint">Klicken zum Ausblenden</div>':'';
 const tipRow=(c,l,v)=>`<div class="r"><span>${c?`<i style="background:${c}"></i>`:''}${esc(l)}</span><b>${esc(v)}</b></div>`;
 function niceStep(raw){const e=Math.pow(10,Math.floor(Math.log10(raw)));const f=raw/e;return (f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10)*e}
 function scaleY(max,n=4){if(!(max>0))return{top:1,step:.25};const step=niceStep(max/n);return{top:Math.ceil(max/step)*step,step}}
@@ -750,8 +787,8 @@ const W=el=>Math.max(280,el.clientWidth||el.parentElement?.clientWidth||600);
 function barTop(x,y,w,h,r){r=Math.min(r,w/2,h);if(h<=0)return'';return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`}
 function barRight(x,y,w,h,r){r=Math.min(r,h/2,w);if(w<=0)return'';return `M${x},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h-r}Q${x+w},${y+h} ${x+w-r},${y+h}H${x}Z`}
 const isBk=n=>/abgerechnet/i.test(n||'');
-const bkAus=n=>FILT.noBk&&isBk(n);
-function legend(items){return `<div class="legend">${items.map(s=>{const bk=isBk(s.name);return `<span${bk?` class="lg-bk${FILT.noBk?' off':''}" role="button" tabindex="0" title="Abgerechnet ${FILT.noBk?'einblenden':'ausblenden'}"`:''}><i class="${s.shape||''}" style="background:${s.color}"></i>${esc(s.name)}</span>`}).join('')}</div>`}
+const bkAus=n=>(FILT.noBk&&isBk(n))||SERAUS.has(CUR+'|'+n);
+function legend(items){const viele=items.length>1;return `<div class="legend">${items.map(s=>{const bk=isBk(s.name);const aus=SERAUS.has(CUR+'|'+s.name);return `<span${bk?` class="lg-bk${FILT.noBk?' off':''}" role="button" tabindex="0" title="Abgerechnet ${FILT.noBk?'einblenden':'ausblenden'}"`:viele&&CUR&&!s.fix?` class="lg-ser${aus?' off':''}" data-ser="${esc(s.name)}" role="button" tabindex="0" title="${aus?'Einblenden':'Ausblenden'}"`:''}><i class="${s.shape||''}" style="background:${s.color}"></i>${esc(s.name)}</span>`}).join('')}</div>`}
 
 function vbars(el,labels,series,o={}){
   series=series.filter(s=>!bkAus(s.name));if(!series.length){el.innerHTML='<div class="empty">Alle Reihen ausgeblendet</div>';return}
@@ -790,7 +827,7 @@ function hbars(el,rows,o={}){
     r.vals.forEach((v,j)=>{const bw=Math.max(0,(v.v/max)*pw);s+=`<path d="${barRight(lw,yb+j*(bh+gap),bw,bh,4)}" style="fill:${v.color}"/>`});
     const tv=r.text??(o.fmt||fh)(r.vals[0].v);
     s+=`<text class="val" x="${lw+Math.max(...r.vals.map(v=>(v.v/max)*pw))+6}" y="${y0+rh/2+3.5}">${esc(tv)}</text>`;
-    s+=`<rect class="hit" x="0" y="${y0}" width="${w}" height="${rh}" rx="6" data-tip="${tip(r.tip||('<b>'+esc(r.label)+'</b>'+r.vals.map(v=>tipRow(v.color,v.name||'',(o.fmt||fh)(v.v))).join('')))}"/>`;
+    s+=`<rect class="hit" x="0" y="${y0}" width="${w}" height="${rh}" rx="6"${ausAttr(r.aus)} data-tip="${tip((r.tip||('<b>'+esc(r.label)+'</b>'+r.vals.map(v=>tipRow(v.color,v.name||'',(o.fmt||fh)(v.v))).join('')))+ausHint(r.aus))}"/>`;
   });
   s+=`<line class="base" x1="${lw}" x2="${lw}" y1="0" y2="${h}"/></svg>`;
   el.innerHTML=s;
@@ -805,7 +842,8 @@ function stack100(el,rows,keys,o={}){
     const tot=r.total||1;
     keys.forEach((k,j)=>{
       const v=r.parts[k.k]||0;if(v<=0)return;const sw=v/tot*pw;const ww=Math.max(0,sw-2);
-      s+=`<rect x="${x}" y="${yb}" width="${ww}" height="${bh}" rx="3" style="fill:${k.color}" data-tip="${tip(`<b>${esc(r.label)} · ${esc(k.name)}</b>`+tipRow(k.color,'Anteil',fp(v/tot))+tipRow('','Aufwand',fh(v)))}"/>`;
+      const aa=o.aus&&k.k!=='__rest'?[o.aus,k.k]:null;
+      s+=`<rect x="${x}" y="${yb}" width="${ww}" height="${bh}" rx="3" style="fill:${k.color}${aa?';cursor:pointer':''}"${ausAttr(aa)} data-tip="${tip(`<b>${esc(r.label)} · ${esc(k.name)}</b>`+tipRow(k.color,'Anteil',fp(v/tot))+tipRow('','Aufwand',fh(v))+ausHint(aa))}"/>`;
       if(ww>42)s+=`<text x="${x+ww/2}" y="${yb+bh/2+3.5}" text-anchor="middle" style="fill:var(--void);font-weight:600">${nf0.format(v/tot*100)}%</text>`;
       x+=sw;
     });
@@ -828,11 +866,12 @@ function dotRange(el,rows,o={}){
     s+=`<circle cx="${x(r.med)}" cy="${yc}" r="5" style="fill:var(--c2);stroke:var(--void);stroke-width:2"/>`;
     const ax=x(r.avg);s+=`<path d="M${ax},${yc-6}L${ax+6},${yc}L${ax},${yc+6}L${ax-6},${yc}Z" style="fill:var(--c1);stroke:var(--void);stroke-width:2"/>`;
     s+=`<text class="val" x="${w-4}" y="${yc+3.5}" text-anchor="end">Ø ${nf1.format(r.avg)} · M ${nf1.format(r.med)}</text>`;
-    s+=`<rect class="hit" x="0" y="${yc-rh/2}" width="${w}" height="${rh}" rx="6" data-tip="${tip(`<b>${esc(r.label)}</b>`+tipRow('','Anzahl',nf0.format(r.n))+tipRow('var(--c1)','Durchschnitt',fd(r.avg))+tipRow('var(--c2)','Median',fd(r.med))+tipRow('var(--c3)','Quartile 25–75 %',nf1.format(r.p25)+' – '+fd(r.p75))+tipRow('','85 %-Wert',fd(r.p85))+tipRow('','Min – Max',nf1.format(r.min)+' – '+fd(r.max)))}"/>`;
+    s+=`<rect class="hit" x="0" y="${yc-rh/2}" width="${w}" height="${rh}" rx="6"${ausAttr(['prefix',r.label])} data-tip="${tip(ausHint(['prefix',r.label]).replace('tip-hint','tip-hint top')+`<b>${esc(r.label)}</b>`+tipRow('','Anzahl',nf0.format(r.n))+tipRow('var(--c1)','Durchschnitt',fd(r.avg))+tipRow('var(--c2)','Median',fd(r.med))+tipRow('var(--c3)','Quartile 25–75 %',nf1.format(r.p25)+' – '+fd(r.p75))+tipRow('','85 %-Wert',fd(r.p85))+tipRow('','Min – Max',nf1.format(r.min)+' – '+fd(r.max)))}"/>`;
   });
   s+='</svg>';el.innerHTML=s;
 }
 function lineChart(el,labels,series,o={}){
+  series=series.filter(s=>!bkAus(s.name));
   const w=W(el),h=o.h||220,m={l:46,r:12,t:12,b:26},pw=w-m.l-m.r,ph=h-m.t-m.b,n=labels.length;
   if(!n||!series.some(s=>s.vals.some(v=>v!=null))){el.innerHTML='<div class="empty">Keine Daten</div>';return}
   const max=Math.max(0,...series.flatMap(s=>s.vals.filter(v=>v!=null)));const {top,step}=scaleY(max);
@@ -864,7 +903,7 @@ function bullet(el,rows){
     s+=`<line x1="${lw+X(r.cap)}" x2="${lw+X(r.cap)}" y1="${yb-7}" y2="${yb+bh+7}" style="stroke:var(--text);stroke-width:2"/>`;
     const d=r.cap-r.load;
     s+=`<text class="val" x="${w-4}" y="${y0+rh/2+3.5}" text-anchor="end">${over?'▲ ':''}${(d>=0?'+':'−')+nf1.format(Math.abs(d))} h${over?' Überlast':' frei'}</text>`;
-    s+=`<rect class="hit" x="0" y="${y0}" width="${w}" height="${rh}" rx="6" data-tip="${tip(`<b>${esc(r.label)}</b>`+tipRow(over?'var(--c4)':'var(--c2)','Offener Aufwand',fh(r.load))+tipRow('','Kapazität',fh(r.cap))+tipRow('','Differenz',(d>=0?'+':'−')+fh(Math.abs(d)))+tipRow('','Offene Workitems',nf0.format(r.n)))}"/>`;
+    s+=`<rect class="hit" x="0" y="${y0}" width="${w}" height="${rh}" rx="6"${ausAttr(['asg',r.label])} data-tip="${tip(ausHint(['asg',r.label]).replace('tip-hint','tip-hint top')+`<b>${esc(r.label)}</b>`+tipRow(over?'var(--c4)':'var(--c2)','Offener Aufwand',fh(r.load))+tipRow('','Kapazität',fh(r.cap))+tipRow('','Differenz',(d>=0?'+':'−')+fh(Math.abs(d)))+tipRow('','Offene Workitems',nf0.format(r.n)))}"/>`;
   });
   s+='</svg>';el.innerHTML=s;
 }
@@ -952,14 +991,14 @@ function rIssAsg(c){
   for(const b of D.bks){const p=bookPerson(b);if(!asgOk(p)||(!b.iss&&!b.date)||!yearOk(bookDate(b)))continue;g(p).b+=b.h}
   const rows=[...M.values()].map(r=>Object.assign(r,{d:r.b-r.p,q:r.p?r.b/r.p:null})).sort((a,b)=>b.b-a.b);
   c.top.innerHTML=legend([{name:H.l,color:H.c},{name:B.l,color:B.c}]);
-  hbars(c.chart,rows.slice(0,15).map(r=>({label:r.a,vals:[{v:r.p,color:H.c,name:H.l},{v:r.b,color:B.c,name:B.l}],text:FILT.noBk?fh(r.p):fh(r.b),tip:`<b>${esc(r.a)}</b>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Ist/Plan',fp(r.q))+tipRow('','Issues',nf0.format(r.n))})));
+  hbars(c.chart,rows.slice(0,15).map(r=>({aus:['asg',r.a],label:r.a,vals:[{v:r.p,color:H.c,name:H.l},{v:r.b,color:B.c,name:B.l}],text:FILT.noBk?fh(r.p):fh(r.b),tip:`<b>${esc(r.a)}</b>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Ist/Plan',fp(r.q))+tipRow('','Issues',nf0.format(r.n))})));
   c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'n',l:'Issues',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':'',bk:1},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{sort:{k:'b',d:-1}}));
 }
 function rOverrun(c){
   const rows=D.issues.filter(i=>asgOk(i.assignee)&&yearOk(issDate(i))&&(i.est>0||i.booked>0)).map(i=>({id:i.id,t:i.title,a:i.assignee,c:i.cat,s:i.state,p:i.est,b:i.booked,d:i.booked-i.est,q:i.est?i.booked/i.est:null})).sort((a,b)=>b.d-a.d);
   const top=rows.filter(r=>r.d>0).slice(0,10);
   c.top.innerHTML=legend([{name:'Überschreitung (abgerechnet − geplant)',color:'var(--c4)'}]);
-  hbars(c.chart,top.map(r=>({label:r.id+' '+r.t,vals:[{v:r.d,color:'var(--c4)',name:'Überschreitung'}],text:'+'+fh(r.d),tip:`<b>${esc(r.id)}</b><div style="color:var(--text-2);margin-bottom:4px">${esc(r.t)}</div>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Assignee',r.a)})),{lw:220});
+  hbars(c.chart,top.map(r=>({aus:['iss',r.id],label:r.id+' '+r.t,vals:[{v:r.d,color:'var(--c4)',name:'Überschreitung'}],text:'+'+fh(r.d),tip:`<b>${esc(r.id)}</b><div style="color:var(--text-2);margin-bottom:4px">${esc(r.t)}</div>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Assignee',r.a)})),{lw:220});
   if(!top.length)c.chart.innerHTML='<div class="empty">Keine Überschreitungen</div>';
   c.table(table(c.id,[{k:'id',l:'ID'},{k:'t',l:'Titel',html:r=>`<div class="trunc" title="${esc(r.t)}">${esc(r.t)}</div>`},{k:'a',l:'Assignee'},{k:'c',l:'Kategorie'},{k:'s',l:'State'},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Δ h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':''},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{limit:300}));
 }
@@ -987,6 +1026,7 @@ function catKeys(tot,max=6){
   const top=ks.slice(0,ks.length>max?max-1:max),rest=ks.slice(top.length);
   const keys=top.map((k,i)=>({k,name:k,color:`var(--c${i+1})`}));
   if(rest.length)keys.push({k:'__rest',name:'Sonstige ('+rest.length+')',color:'var(--c0)'});
+  keys.forEach(k=>k.fix=1);
   return {keys,map:k=>top.includes(k)?k:'__rest'};
 }
 function rWiDept(c){
@@ -996,7 +1036,7 @@ function rWiDept(c){
   const ys=[...Y.keys()].sort();
   const rows=ys.map(y=>{const parts={};let t=0;for(const [d,v] of Y.get(y)){const k=map(d);parts[k]=(parts[k]||0)+v;t+=v}return{label:String(y),parts,total:t}});
   if(rows.length>1){const parts={};let t=0;rows.forEach(r=>{for(const k in r.parts){parts[k]=(parts[k]||0)+r.parts[k];t+=r.parts[k]}});rows.push({label:'Gesamt',parts,total:t})}
-  c.top.innerHTML=legend(keys);stack100(c.chart,rows,keys);
+  c.top.innerHTML=legend(keys);stack100(c.chart,rows,keys,{aus:'dept'});
   const depts=[...tot.keys()].sort((a,b)=>tot.get(b)-tot.get(a));
   const trs=depts.map(d=>{const r={d};ys.forEach(y=>{const m=Y.get(y),v=m.get(d)||0,t=[...m.values()].reduce((a,b)=>a+b,0);r['h'+y]=v;r['p'+y]=t?v/t:0});r.t=tot.get(d);return r});
   const cols=[{k:'d',l:'Abteilung'}];ys.forEach(y=>{cols.push({k:'h'+y,l:y+' h',n:1,f:v=>nf1.format(v)},{k:'p'+y,l:y+' %',n:1,f:v=>fp(v)})});cols.push({k:'t',l:'Gesamt h',n:1,f:v=>nf1.format(v)});
@@ -1007,7 +1047,7 @@ function rWiAsg(c){
   for(const w of D.wis){if(!asgOk(w.assignee)||w.sc==='canceled'||!yearOk(wiDate(w)))continue;if(!M.has(w.assignee))M.set(w.assignee,{a:w.assignee,h:0,n:0,c:0});const o=M.get(w.assignee);o.h+=w.est;o.n++;if(w.sc==='closed')o.c++;tot+=w.est}
   const rows=[...M.values()].map(r=>Object.assign(r,{p:tot?r.h/tot:0,dept:deptName(r.a)})).sort((a,b)=>b.h-a.h);
   c.top.innerHTML=legend([{name:'Anteil am Workitem-Aufwand',color:'var(--c3)'}]);
-  hbars(c.chart,rows.slice(0,25).map(r=>({label:r.a,vals:[{v:r.p,color:'var(--c3)',name:'Anteil'}],text:fp(r.p)+' · '+fh(r.h),tip:`<b>${esc(r.a)}</b>`+tipRow('var(--c3)','Anteil',fp(r.p))+tipRow('','Aufwand',fh(r.h))+tipRow('','Workitems',nf0.format(r.n)+' ('+nf0.format(r.c)+' closed)')})),{vw:130,fmt:fp});
+  hbars(c.chart,rows.slice(0,25).map(r=>({aus:['asg',r.a],label:r.a,vals:[{v:r.p,color:'var(--c3)',name:'Anteil'}],text:fp(r.p)+' · '+fh(r.h),tip:`<b>${esc(r.a)}</b>`+tipRow('var(--c3)','Anteil',fp(r.p))+tipRow('','Aufwand',fh(r.h))+tipRow('','Workitems',nf0.format(r.n)+' ('+nf0.format(r.c)+' closed)')})),{vw:130,fmt:fp});
   c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'dept',l:'Abteilung'},{k:'n',l:'Workitems',n:1},{k:'c',l:'closed',n:1},{k:'h',l:'Aufwand h',n:1,f:v=>nf1.format(v)},{k:'p',l:'Anteil',n:1,f:v=>fp(v)}],rows,{sum:{a:'Summe',n:rows.reduce((a,r)=>a+r.n,0),c:rows.reduce((a,r)=>a+r.c,0),h:tot,p:tot?1:0}}));
 }
 function rOnTime(c){
@@ -1017,7 +1057,7 @@ function rOnTime(c){
     const d=Math.floor(w.actual/DAY)-Math.floor(w.planned/DAY);if(d<=0)o.ok++;else o.late.push(d)}
   const rows=[...M.values()].map(r=>({a:r.a,n:r.n,ok:r.ok,q:r.ok/r.n,late:r.late.length,dl:r.late.length?r.late.reduce((a,b)=>a+b,0)/r.late.length:null})).sort((a,b)=>b.n-a.n);
   c.top.innerHTML=legend([{name:'Anteil pünktlich',color:'var(--c2)'}]);
-  hbars(c.chart,rows.slice(0,15).map(r=>({label:r.a,vals:[{v:r.q,color:'var(--c2)',name:'pünktlich'}],text:fp(r.q)+' von '+r.n,tip:`<b>${esc(r.a)}</b>`+tipRow('var(--c2)','pünktlich',fp(r.q))+tipRow('','abgeschlossen',nf0.format(r.n))+tipRow('','verspätet',nf0.format(r.late))+tipRow('','Ø Verzug',fd(r.dl))})),{max:1,vw:110,fmt:fp});
+  hbars(c.chart,rows.slice(0,15).map(r=>({aus:['asg',r.a],label:r.a,vals:[{v:r.q,color:'var(--c2)',name:'pünktlich'}],text:fp(r.q)+' von '+r.n,tip:`<b>${esc(r.a)}</b>`+tipRow('var(--c2)','pünktlich',fp(r.q))+tipRow('','abgeschlossen',nf0.format(r.n))+tipRow('','verspätet',nf0.format(r.late))+tipRow('','Ø Verzug',fd(r.dl))})),{max:1,vw:110,fmt:fp});
   const n=rows.reduce((a,r)=>a+r.n,0),ok=rows.reduce((a,r)=>a+r.ok,0);
   c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'n',l:'closed',n:1},{k:'ok',l:'pünktlich',n:1},{k:'q',l:'Quote',n:1,f:v=>fp(v)},{k:'late',l:'verspätet',n:1},{k:'dl',l:'Ø Verzug d',n:1,f:v=>v==null?'–':nf1.format(v),sv:r=>r.dl??0}],rows,{sum:{a:'Summe',n,ok,q:n?ok/n:null,late:n-ok}}));
 }
@@ -1026,7 +1066,7 @@ function rLeadPrefix(c){
    <span class="inline-ctl">min. n <select class="sel" data-l="leadMin"><option>1</option><option>3</option><option>5</option><option>10</option></select></span>`;
   const it=leadItems(),M=new Map();for(const w of it){if(!M.has(w.prefix))M.set(w.prefix,[]);M.get(w.prefix).push(w.lt)}
   const rows=[...M.entries()].map(([p,a])=>Object.assign({label:p},stats(a))).filter(r=>r.n>=+LOCAL.leadMin).sort((a,b)=>b.n-a.n);
-  c.top.innerHTML=legend([{name:'Durchschnitt',color:'var(--c1)',shape:'dia'},{name:'Median',color:'var(--c2)',shape:'rd'},{name:'Quartile 25–75 %',color:'var(--c3)',shape:'ln'}]);
+  c.top.innerHTML=legend([{name:'Durchschnitt',color:'var(--c1)',shape:'dia',fix:1},{name:'Median',color:'var(--c2)',shape:'rd',fix:1},{name:'Quartile 25–75 %',color:'var(--c3)',shape:'ln',fix:1}]);
   dotRange(c.chart,rows.slice(0,30));
   const all=stats(it.map(w=>w.lt));
   c.table(table(c.id,[{k:'label',l:'Präfix'},{k:'n',l:'Anzahl',n:1},{k:'avg',l:'Ø Tage',n:1,f:v=>nf1.format(v)},{k:'med',l:'Median',n:1,f:v=>nf1.format(v)},{k:'p25',l:'25 %',n:1,f:v=>nf1.format(v)},{k:'p75',l:'75 %',n:1,f:v=>nf1.format(v)},{k:'p85',l:'85 %',n:1,f:v=>nf1.format(v)},{k:'min',l:'Min',n:1,f:v=>nf1.format(v)},{k:'max',l:'Max',n:1,f:v=>nf1.format(v)}],rows,{sum:all?Object.assign({label:'Alle'},all):null}));
@@ -1060,7 +1100,7 @@ function rForecast(c){
   for(const w of D.wis){if(w.sc!=='open'||!asgOk(w.assignee))continue;if(!M.has(w.assignee))M.set(w.assignee,{a:w.assignee,n:0,h:0,od:0,noest:0});const o=M.get(w.assignee);o.n++;o.h+=w.est;if(!w.est)o.noest++;if(w.planned!=null&&w.planned<today)o.od++}
   const hz=+LOCAL.horizon;
   const rows=[...M.values()].map(r=>{const wh=whOf(r.a),cap=wh*hz;return Object.assign(r,{dept:deptName(r.a)||klammer(r.a),wh,cap,d:cap-r.h,wk:wh?r.h/wh:null,u:cap?r.h/cap:null})}).sort((a,b)=>a.d-b.d);
-  c.top.innerHTML=legend([{name:'Offener Aufwand',color:'var(--c2)'},{name:'über Kapazität',color:'var(--c4)'},{name:'Kapazität ('+(hz===1?'1 Woche':hz+' Wochen')+')',color:'var(--text)',shape:'ln'}]);
+  c.top.innerHTML=legend([{name:'Offener Aufwand',color:'var(--c2)',fix:1},{name:'über Kapazität',color:'var(--c4)',fix:1},{name:'Kapazität ('+(hz===1?'1 Woche':hz+' Wochen')+')',color:'var(--text)',shape:'ln',fix:1}]);
   bullet(c.chart,rows.map(r=>({label:r.a,load:r.h,cap:r.cap,n:r.n})));
   const S={a:'Summe',n:0,h:0,wh:0,cap:0,d:0,od:0};rows.forEach(r=>{S.n+=r.n;S.h+=r.h;S.wh+=r.wh;S.cap+=r.cap;S.d+=r.d;S.od+=r.od});S.wk=S.wh?S.h/S.wh:null;S.u=S.cap?S.h/S.cap:null;
   c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'dept',l:'Abteilung'},{k:'n',l:'Offene WI',n:1},{k:'h',l:'Offener Aufwand h',n:1,f:v=>nf1.format(v)},
@@ -1071,29 +1111,29 @@ function rForecast(c){
 }
 function rQuality(c){
   const items=[];
-  const n=D.bks.length,cnt=k=>D.bks.filter(b=>b.how===k),hs=a=>a.reduce((s,b)=>s+b.h,0);
-  const ex=cnt('exakt'),sw=cnt('schreibweise'),nu=cnt('nummer'),oh=D.bks.filter(b=>!b.iss);
+  const n=D.full.bks.length,cnt=k=>D.full.bks.filter(b=>b.how===k),hs=a=>a.reduce((s,b)=>s+b.h,0);
+  const ex=cnt('exakt'),sw=cnt('schreibweise'),nu=cnt('nummer'),oh=D.full.bks.filter(b=>!b.iss);
   items.push({ok:1,k:'Buchungen exakt zugeordnet',n:ex.length,h:hs(ex),ex:fp(n?ex.length/n:null)+' aller Buchungen'});
   if(sw.length)items.push({ok:1,k:'… zugeordnet trotz anderer Schreibweise',n:sw.length,h:hs(sw),ex:sw.slice(0,4).map(b=>b.id+' → '+b.iss.id).join(' · ')});
   if(nu.length)items.push({k:'… zugeordnet nur über die Nummer – bitte prüfen',n:nu.length,h:hs(nu),ex:nu.slice(0,4).map(b=>b.id+' → '+b.iss.id).join(' · ')});
   const db=D.dup.bk;if(db.length)items.push({ok:1,k:'Buchungszeilen ignoriert – ID kam schon weiter oben vor',n:db.length,h:db.reduce((a,b)=>a+b.h,0),ex:[...new Set(db.map(b=>b.id))].slice(0,8).join(', ')});
   if(D.dup.iss.length)items.push({k:'Issue-IDs doppelt in Datei 1 – erste Zeile zählt',n:D.dup.iss.length,h:0,ex:[...new Set(D.dup.iss)].slice(0,8).join(', ')});
   const orphan=oh;items.push({k:'Buchungen ohne passendes Issue',n:orphan.length,h:orphan.reduce((a,b)=>a+b.h,0),ex:[...new Set(orphan.map(b=>b.id))].slice(0,8).join(', ')});
-  const nob=D.issues.filter(i=>!i.nb);items.push({k:'Issues ohne Buchung',n:nob.length,h:nob.reduce((a,i)=>a+i.est,0),ex:nob.slice(0,8).map(i=>i.id).join(', ')});
-  const noe=D.issues.filter(i=>!i.est);items.push({k:'Issues ohne Schätzung',n:noe.length,h:noe.reduce((a,i)=>a+i.booked,0),ex:noe.slice(0,8).map(i=>i.id).join(', ')});
-  const nod=D.issues.filter(i=>i.submit==null);items.push({k:'Issues ohne Submit-Datum',n:nod.length,h:nod.reduce((a,i)=>a+i.est,0),ex:nod.slice(0,8).map(i=>i.id).join(', ')});
-  const wa=D.wis.filter(w=>w.assignee===NOASG);items.push({k:'Workitems ohne Assignee',n:wa.length,h:wa.reduce((a,w)=>a+w.est,0),ex:wa.slice(0,8).map(w=>w.id||w.title).join(', ')});
-  const wc=D.wis.filter(w=>w.sc==='closed'&&w.actual==null);items.push({k:'Workitems closed ohne Actual Date',n:wc.length,h:wc.reduce((a,w)=>a+w.est,0),ex:wc.slice(0,8).map(w=>w.id||w.title).join(', ')});
-  const wn=D.wis.filter(w=>w.actual!=null&&(w.start??w.submit)!=null&&w.actual<(w.start??w.submit));items.push({k:'Workitems mit Abschluss vor Start',n:wn.length,h:wn.reduce((a,w)=>a+w.est,0),ex:wn.slice(0,8).map(w=>w.id||w.title).join(', ')});
-  const wo=D.wis.filter(w=>w.sc==='open'&&!w.est);items.push({k:'Offene Workitems ohne Schätzung',n:wo.length,h:0,ex:wo.slice(0,8).map(w=>w.id||w.title).join(', ')});
+  const nob=D.full.issues.filter(i=>!i.nb);items.push({k:'Issues ohne Buchung',n:nob.length,h:nob.reduce((a,i)=>a+i.est,0),ex:nob.slice(0,8).map(i=>i.id).join(', ')});
+  const noe=D.full.issues.filter(i=>!i.est);items.push({k:'Issues ohne Schätzung',n:noe.length,h:noe.reduce((a,i)=>a+i.booked,0),ex:noe.slice(0,8).map(i=>i.id).join(', ')});
+  const nod=D.full.issues.filter(i=>i.submit==null);items.push({k:'Issues ohne Submit-Datum',n:nod.length,h:nod.reduce((a,i)=>a+i.est,0),ex:nod.slice(0,8).map(i=>i.id).join(', ')});
+  const wa=D.full.wis.filter(w=>w.assignee===NOASG);items.push({k:'Workitems ohne Assignee',n:wa.length,h:wa.reduce((a,w)=>a+w.est,0),ex:wa.slice(0,8).map(w=>w.id||w.title).join(', ')});
+  const wc=D.full.wis.filter(w=>w.sc==='closed'&&w.actual==null);items.push({k:'Workitems closed ohne Actual Date',n:wc.length,h:wc.reduce((a,w)=>a+w.est,0),ex:wc.slice(0,8).map(w=>w.id||w.title).join(', ')});
+  const wn=D.full.wis.filter(w=>w.actual!=null&&(w.start??w.submit)!=null&&w.actual<(w.start??w.submit));items.push({k:'Workitems mit Abschluss vor Start',n:wn.length,h:wn.reduce((a,w)=>a+w.est,0),ex:wn.slice(0,8).map(w=>w.id||w.title).join(', ')});
+  const wo=D.full.wis.filter(w=>w.sc==='open'&&!w.est);items.push({k:'Offene Workitems ohne Schätzung',n:wo.length,h:0,ex:wo.slice(0,8).map(w=>w.id||w.title).join(', ')});
   const st=[...D.states.wi.entries()].map(([s,n])=>s+' ('+n+')').join(', ');
   const L=CFG.map,bsp=(a,k)=>a.slice(0,6).map(x=>esc(String(x[k]??''))).join(' · ')||'–';
-  const roh=D.bks.slice(0,6).map(b=>esc(typeof b.roh==='number'?String(+b.roh.toFixed(4)).replace('.',','):JSON.stringify(b.roh??''))+' → '+nf1.format(b.h)+' h').join(' · ');
+  const roh=D.full.bks.slice(0,6).map(b=>esc(typeof b.roh==='number'?String(+b.roh.toFixed(4)).replace('.',','):JSON.stringify(b.roh??''))+' → '+nf1.format(b.h)+' h').join(' · ');
   const zeitHinweis=D.bkUnit==='xt'?' <b>Spalte '+esc(L.bk.val)+' ist als Uhrzeit/Dauer formatiert – wird mal 24 in Stunden umgerechnet.</b>':
-    (D.bks.length>5&&D.bks.filter(b=>b.h>0&&b.h<1.5).length>D.bks.length*.7?' <b>Fast alle Werte liegen unter 1,5 h – ist die Spalte vielleicht eine Excel-Dauer oder in Tagen? Einheit unter Einstellungen ändern.</b>':'');
+    (D.full.bks.length>5&&D.full.bks.filter(b=>b.h>0&&b.h<1.5).length>D.full.bks.length*.7?' <b>Fast alle Werte liegen unter 1,5 h – ist die Spalte vielleicht eine Excel-Dauer oder in Tagen? Einheit unter Einstellungen ändern.</b>':'');
   const blatt=k=>RAW[k]?.others?' · Blatt „'+esc(RAW[k].sheet)+'“ (weitere: '+Object.entries(RAW[k].others).map(([a,b])=>esc(a)+' '+b+' Z.').join(', ')+')':'';
-  const abgl=`<div class="abgl"><div><span class="t-idx">Issue-ID · Datei 1, Spalte ${esc(L.iss.id)}${blatt('iss')}</span><p>${bsp(D.issues,'id')}</p></div>
-    <div><span class="t-idx">Buchungs-ID · Datei 3, Spalte ${esc(L.bk.id)}${blatt('bk')}</span><p>${bsp(D.bks,'id')}</p></div>
+  const abgl=`<div class="abgl"><div><span class="t-idx">Issue-ID · Datei 1, Spalte ${esc(L.iss.id)}${blatt('iss')}</span><p>${bsp(D.full.issues,'id')}</p></div>
+    <div><span class="t-idx">Buchungs-ID · Datei 3, Spalte ${esc(L.bk.id)}${blatt('bk')}</span><p>${bsp(D.full.bks,'id')}</p></div>
     <div><span class="t-idx">Aufwand · Datei 3, Spalte ${esc(L.bk.val)} · Rohwert → Stunden</span><p>${roh||'–'}${zeitHinweis}</p><span class="t-idx" style="margin-top:5px">Dezimalzeichen in Text: ${D.dec.bk===','?'Komma':D.dec.bk==='.'?'Punkt':'keine Text-Zahlen / je Wert'}</span></div></div>`;
   c.top.innerHTML=abgl+`<p class="hinweis" style="margin:0 0 6px">Erkannte Workitem-Stati: ${esc(st||'–')} · als closed zählt „${esc(CFG.closed)}“, als canceled „${esc(CFG.canceled)}“ – anpassbar unter Einstellungen.</p>`;
   c.chart.innerHTML='';
@@ -1128,7 +1168,7 @@ const INFO={
  leadTrend:()=>[['Rechnung',leadTxt()],['Gruppe','Monat des Abschlusses; je Monat Median und Durchschnitt.'],['Filter','Präfix-Auswahl hier, Jahr, Assignee.']],
  leadDist:()=>[['Rechnung',leadTxt()],['Gruppe','Anzahl Workitems je Zeitspanne in Tagen.'],['Filter','Präfix aus „Durchlaufzeit im Verlauf“, Jahr, Assignee.']],
  forecast:()=>[['Offen',offenTxt()],['Aufwand','Summe Estimated Effort (Spalte '+CFG.map.wi.est+') der offenen Workitems je Assignee.'],['Kapazität','Wochenstunden × Horizont. Standard '+nf1.format(+CFG.weekly)+' h, je Person in der Tabelle änderbar.'],['Differenz','Kapazität − offener Aufwand; negativ = Überlast.'],['Reichweite','Offener Aufwand ÷ Wochenstunden, in Wochen.'],['Überfällig','Geplantes Datum vor heute.'],['Filter','Assignee. Der Jahresfilter gilt hier nicht.']],
- quality:()=>[['Zweck','Zeigt, was beim Zusammenführen der drei Dateien nicht passt.'],['Abgleich','Buchung → Issue: erst exakt, '+(CFG.idMatch==='exakt'?'sonst keine Zuordnung.':'dann trotz Schreibweise (Groß/klein, Leer-/Sonderzeichen), zuletzt über eine eindeutige Nummer.')],['Doppelte IDs',CFG.bkDup==='summe'?'Alle Zeilen werden summiert.':'Nur die erste Zeile zählt, die übrigen stehen hier als „ignoriert“.']]
+ quality:()=>[['Zweck','Zeigt, was beim Zusammenführen der drei Dateien nicht passt. Ausgeblendete Einträge zählen hier mit.'],['Abgleich','Buchung → Issue: erst exakt, '+(CFG.idMatch==='exakt'?'sonst keine Zuordnung.':'dann trotz Schreibweise (Groß/klein, Leer-/Sonderzeichen), zuletzt über eine eindeutige Nummer.')],['Doppelte IDs',CFG.bkDup==='summe'?'Alle Zeilen werden summiert.':'Nur die erste Zeile zählt, die übrigen stehen hier als „ignoriert“.']]
 };
 function infoHtml(id){const f=INFO[id];if(!f)return '';try{return f().map(([k,v])=>`<span><i>${esc(k)}</i><em>${esc(v)}</em></span>`).join('')}catch(e){return ''}}
 
@@ -1183,10 +1223,10 @@ const kpiSatz={
       ['Überlastet',nf0.format(ueb)+' von '+nf0.format(M.size),'Personen über Kapazität',ueb>0],['Überfällig',nf0.format(od),'geplantes Datum vor heute',od>0]];
   },
   qa(){
-    const n=D.bks.length,zu=D.bks.filter(b=>b.iss).length,oh=n-zu,ohH=D.bks.filter(b=>!b.iss).reduce((a,b)=>a+b.h,0);
-    const nob=D.issues.filter(i=>!i.nb).length,noe=D.issues.filter(i=>!i.est).length,wc=D.wis.filter(w=>w.sc==='closed'&&w.actual==null).length;
+    const n=D.full.bks.length,zu=D.full.bks.filter(b=>b.iss).length,oh=n-zu,ohH=D.full.bks.filter(b=>!b.iss).reduce((a,b)=>a+b.h,0);
+    const nob=D.full.issues.filter(i=>!i.nb).length,noe=D.full.issues.filter(i=>!i.est).length,wc=D.full.wis.filter(w=>w.sc==='closed'&&w.actual==null).length;
     return [['Zugeordnet',fp(n?zu/n:null),nf0.format(zu)+' von '+nf0.format(n)+' Buchungen',n&&zu/n<.95],['Ohne Issue',nf0.format(oh),fh(ohH)+' nicht zugeordnet',oh>0],
-      ['Doppelzeilen',nf0.format(D.dup.bk.length),CFG.bkDup==='summe'?'werden summiert':'ignoriert (erste Zeile zählt)'],['Issues ohne Buchung',nf0.format(nob),'von '+nf0.format(D.issues.length)],
+      ['Doppelzeilen',nf0.format(D.dup.bk.length),CFG.bkDup==='summe'?'werden summiert':'ignoriert (erste Zeile zählt)'],['Issues ohne Buchung',nf0.format(nob),'von '+nf0.format(D.full.issues.length)],
       ['Ohne Schätzung',nf0.format(noe),'Issues ohne Estimated Effort',noe>0],['Closed ohne Datum',nf0.format(wc),'Workitems ohne Actual Date',wc>0]];
   }
 };
@@ -1218,13 +1258,15 @@ function renderCard(r){
   const c={id:r.id,el,chart:$('.chart',el),top:$('.c-top',el),ctl:$('.c-ctl',el),tableOpen:false,_t:'',table(h){this._t=h}};
   $('.c-sub',el).textContent=r.sub();
   const tipEl=$('.info-tip',el);if(tipEl)tipEl.innerHTML=infoHtml(r.id);
+  CUR=r.id;
   try{r.render(c)}catch(e){console.error(e);c.chart.innerHTML='<div class="empty">Fehler beim Berechnen: '+esc(e.message)+'</div>'}
+  CUR='';
   $$('select[data-l]',el).forEach(s=>s.value=String(LOCAL[s.dataset.l]));
   const open=OPEN.has(r.id)||(c.tableOpen&&!OPEN.has('!'+r.id));
   $('.c-tbl',el).innerHTML=c._t?`<details class="tbl" data-d="${r.id}" ${open?'open':''}><summary>Tabelle</summary>${c._t}</details>`:'';
 }
 const sichtbar=r=>!HID.has(r.id)&&!ZU.has('c:'+r.id)&&r.grp===AKT;
-function rerender(ids){TIPS.clear();renderKpis();for(const r of REPORTS){const el=$(`[data-r="${r.id}"]`);if(el)el.dataset.alt='1';if(sichtbar(r)&&(!ids||ids.includes(r.id))){renderCard(r);if(el)delete el.dataset.alt}}}
+function rerender(ids){if(!ids)TIPS.clear();renderKpis();for(const r of REPORTS){const el=$(`[data-r="${r.id}"]`);if(el)el.dataset.alt='1';if(sichtbar(r)&&(!ids||ids.includes(r.id))){renderCard(r);if(el)delete el.dataset.alt}}}
 function klappen(key,zu){
   if(zu===undefined)zu=!ZU.has(key);
   if(zu)ZU.add(key);else ZU.delete(key);lsSet(LS.zu,[...ZU]);
@@ -1251,7 +1293,6 @@ function zuKategorie(g){
   AKT=g;$$('.kat').forEach(k=>k.hidden=k.dataset.g!==g);
   renderKpis();
   const sek=$(`.kat[data-g="${g}"]`);if(sek&&!reduce){sek.classList.remove('rein');void sek.offsetWidth;sek.classList.add('rein')}
-  TIPS.clear();
   for(const r of REPORTS){if(!sichtbar(r))continue;const el=$(`[data-r="${r.id}"]`);if(el&&(el.dataset.alt||(!$('.chart',el).innerHTML&&!$('.c-tbl',el).innerHTML))){renderCard(r);delete el.dataset.alt}}
   const top=$('#reports').getBoundingClientRect().top+scrollY-140;if(scrollY>top)scrollTo({top,behavior:reduce?'auto':'smooth'});
 }
@@ -1265,6 +1306,8 @@ function renderStats(){
 function renderFilters(){
   const fy=$('#fYear');fy.innerHTML='<option value="all">Alle</option>'+D.years.map(y=>`<option>${y}</option>`).join('');
   if(FILT.year!=='all'&&!D.years.includes(+FILT.year))FILT.year='all';fy.value=String(FILT.year);
+  const ch=$('#fAus');const n=ausZahl();ch.hidden=!n;
+  if(n)$('#fAusListe').innerHTML=Object.entries(AUS).flatMap(([k,v])=>[...v].map(x=>`<button class="chip" type="button" data-ein="${k}" data-wert="${esc(x)}" title="Wieder einblenden"><i>${AUS_ARTEN[k]}</i>${esc(x)}<b aria-hidden="true">×</b></button>`)).join('')+(n>1?'<button class="chip alle" type="button" data-ein="*">alle einblenden</button>':'');
   const fb=$('#fBk');fb.classList.toggle('on',!FILT.noBk);fb.setAttribute('aria-pressed',String(!FILT.noBk));fb.textContent=FILT.noBk?'Abgerechnet aus':'Abgerechnet an';
   $('#fIssDate').value=FILT.issDate;$('#fWiDate').value=FILT.wiDate;$('#fDept').value=FILT.dept;
   if(FILT.asg)FILT.asg=FILT.asg.filter(a=>D.people.includes(a));
@@ -1290,7 +1333,7 @@ function setHidden(id,h){
   syncGroups();renderAns();
 }
 function saveFilt(){lsSet(LS.filt,FILT)}
-function filtChanged(){saveFilt();renderFilters();rerender()}
+function filtChanged(){saveFilt();sichten();renderFilters();rerender()}
 function bkUmschalten(){FILT.noBk=!FILT.noBk;filtChanged();toast(FILT.noBk?'Abgerechnet ausgeblendet':'Abgerechnet eingeblendet')}
 
 /* ─── Einstellungen ────────────────────────────────────────── */
@@ -1585,6 +1628,14 @@ function bind(){
     $$('.info-i.offen').forEach(x=>{if(!ib||x!==ib.parentElement){x.classList.remove('offen');x.querySelector('.info-btn').setAttribute('aria-expanded','false')}});
     if(ib){const h=ib.parentElement,auf=!h.classList.contains('offen');infoLageSetzen(ib);h.classList.toggle('offen',auf);ib.setAttribute('aria-expanded',String(auf));return}
     const kl=e.target.closest('[data-klapp]');if(kl){klappen(kl.dataset.klapp);return}
+    const ein=e.target.closest('[data-ein]');if(ein){if(ein.dataset.ein==='*')Object.values(AUS).forEach(v=>v.clear());else AUS[ein.dataset.ein].delete(ein.dataset.wert);ausSichern();filtChanged();toast('Wieder eingeblendet');return}
+    const ser=e.target.closest('.lg-ser');if(ser){const id=ser.closest('[data-r]').dataset.r,key=id+'|'+ser.dataset.ser;if(SERAUS.has(key))SERAUS.delete(key);else SERAUS.add(key);lsSet('wb-ausw-reihen',[...SERAUS]);rerender([id]);return}
+    const pop=$('#ausPop');
+    const au=e.target.closest('[data-aus]');
+    if(au){const a=AUSZ.get(au.dataset.aus);if(a){pop.innerHTML=`<button type="button" class="pill sm" data-ausweg="1">${esc(AUS_ARTEN[a[0]])} „${esc(trunc(a[1],40))}“ ausblenden</button>`;pop._a=a;
+      pop.hidden=false;const r=pop.getBoundingClientRect();pop.style.left=Math.min(innerWidth-r.width-10,Math.max(10,e.clientX-r.width/2))+'px';pop.style.top=Math.min(innerHeight-r.height-10,e.clientY+14)+'px';$('#tip').classList.remove('on');return}}
+    if(e.target.closest('[data-ausweg]')&&pop._a){const [k,v]=pop._a;AUS[k].add(v);ausSichern();pop.hidden=true;filtChanged();toast(AUS_ARTEN[k]+' ausgeblendet – über den Chip in der Filterleiste zurückholen');return}
+    if(!e.target.closest('#ausPop'))pop.hidden=true;
     if(e.target.closest('.lg-bk'))bkUmschalten();
     const c=e.target.closest('[data-csv]');if(c)csv(c.dataset.csv);
     const th=e.target.closest('[data-tbl] th');if(th){const id=th.closest('[data-tbl]').dataset.tbl,t=TABLES[id];t.sort={k:th.dataset.k,d:t.sort?.k===th.dataset.k?-t.sort.d:-1};th.closest('[data-tbl]').innerHTML=tableInner(id)}
