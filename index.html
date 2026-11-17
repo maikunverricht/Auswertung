@@ -250,6 +250,11 @@ dialog.dlg::backdrop{background:color-mix(in srgb,#04070B 74%,transparent);-webk
 .map label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--text-2)}
 .map input,.map select{height:30px;border-radius:9px;border:1px solid var(--line);background:var(--film);padding:0 9px;font-family:var(--mono);font-size:12.5px}
 .map select option{background:var(--void)}
+.abgl{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:0 0 10px}
+.abgl > div{background:var(--surface);padding:9px 12px;min-width:0}
+.abgl p{margin:3px 0 0;font-family:var(--mono);font-size:11.5px;color:var(--text);word-break:break-all}
+.abgl b{font-family:var(--display);font-weight:600;color:var(--amber);word-break:normal}
+@media (max-width:900px){.abgl{grid-template-columns:1fr}}
 .hinweis{margin:8px 0 0;font-size:12.5px;color:var(--text-3);line-height:1.5}
 .ppl td input{height:26px;border-radius:8px;border:1px solid var(--line);background:var(--film);padding:0 8px;font-size:12.5px;width:100%}
 .ppl td input.num{width:80px;text-align:right;font-family:var(--mono)}
@@ -401,7 +406,7 @@ const DEF={
     bk:{id:'P',val:'U',date:'',person:''}
   },
   unit:{iss:'h',wi:'h',bk:'h'},
-  hpd:8, weekly:40,
+  hpd:8, weekly:40, idMatch:'tolerant', sheet:{iss:'',wi:'',bk:''},
   closed:'closed', canceled:'canceled, cancelled',
   prefixSrc:'title', prefixSep:'-', prefixPart:2,
   people:{}
@@ -440,9 +445,10 @@ function toDate(v){
 }
 function toHours(v,unit){
   if(v==null||v==='')return 0;
-  const f=unit==='d'?CFG.hpd:1;
+  const f=unit==='d'?CFG.hpd:unit==='min'?1/60:unit==='xt'?24:1;
   if(typeof v==='number')return isFinite(v)?v*f:0;
   let s=String(v).trim().toLowerCase();
+  let hm=s.match(/^(-?\d+):(\d{2})(?::(\d{2}))?$/);if(hm)return (+hm[1])+(+hm[2])/60+(+(hm[3]||0))/3600;
   if(/[wdhm]\b|\d\s*[wdhm]/.test(s)&&/\d\s*[wdhm]/.test(s)){
     let t=0,m;const re=/(\d+(?:[.,]\d+)?)\s*([wdhm])/g;
     while((m=re.exec(s))){const n=parseFloat(m[1].replace(',','.'));t+=m[2]==='w'?n*5*CFG.hpd:m[2]==='d'?n*CFG.hpd:m[2]==='h'?n:n/60}
@@ -453,6 +459,7 @@ function toHours(v,unit){
   else s=s.replace(',','.');
   const n=parseFloat(s);return isFinite(n)?n*f:0;
 }
+const unitFor=(key,L,u)=>(u==='h'&&RAW[key]?.fmt?.[String(L||'').toUpperCase()]==='zeit')?'xt':u;
 const normId=v=>v==null?'':String(v).trim().replace(/\.0+$/,'');
 const normName=v=>{const s=v==null?'':String(v).trim();return s||NOASG};
 const normTxt=v=>v==null?'':String(v).trim();
@@ -461,10 +468,21 @@ function readFile(file,key){
   return new Promise((res,rej)=>{
     const r=new FileReader();
     r.onload=()=>{try{
-      const wb=XLSX.read(new Uint8Array(r.result),{type:'array',cellDates:false,raw:false});
-      let best=null,bn=-1;
-      for(const n of wb.SheetNames){const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:null,blankrows:false});if(rows.length>bn){bn=rows.length;best=rows}}
-      RAW[key]={name:file.name,rows:best||[],at:Date.now()};
+      const wb=XLSX.read(new Uint8Array(r.result),{type:'array',cellDates:false,cellNF:true,raw:false});
+      const sheets={};
+      for(const n of wb.SheetNames){const ws=wb.Sheets[n];
+        const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:null,blankrows:false});
+        /* Spalten im Zeitformat ([h]:mm, hh:mm) erkennen – Excel speichert sie als Bruchteil eines Tages */
+        const zeit={},zahl={};
+        for(const a in ws){if(a[0]==='!')continue;const c=ws[a];if(!c||c.t!=='n')continue;const col=a.replace(/\d+$/,'');zahl[col]=(zahl[col]||0)+1;
+          const z=String(c.z||'');if(/h/i.test(z)&&/:/.test(z)&&!/[yd]/i.test(z.replace(/\[h\]/i,'')))zeit[col]=(zeit[col]||0)+1}
+        const fmt={};for(const col in zeit)if(zeit[col]>=zahl[col]*.5)fmt[col]='zeit';
+        sheets[n]={rows,fmt};
+      }
+      const wahl=CFG.sheet?.[key];let name=wahl&&sheets[wahl]?wahl:null;
+      if(!name){let bn=-1;for(const n in sheets)if(sheets[n].rows.length>bn){bn=sheets[n].rows.length;name=n}}
+      RAW[key]={name:file.name,sheet:name,sheetNames:wb.SheetNames,rows:sheets[name]?.rows||[],fmt:sheets[name]?.fmt||{},at:Date.now()};
+      if(Object.keys(sheets).length>1)RAW[key].others=Object.fromEntries(Object.entries(sheets).filter(([n])=>n!==name).map(([n,v])=>[n,v.rows.length]));
       res();
     }catch(e){rej(e)}};
     r.onerror=()=>rej(r.error);r.readAsArrayBuffer(file);
@@ -485,7 +503,7 @@ function build(){
   for(const r of (RAW.iss?.rows||[]).slice(H)){
     const id=normId(g(r,mp.iss.id));if(!id)continue;
     const o={id,title:normTxt(g(r,mp.iss.title)),state:normTxt(g(r,mp.iss.state)),submit:toDate(g(r,mp.iss.submit)),
-      assignee:normName(g(r,mp.iss.assignee)),est:toHours(g(r,mp.iss.est),CFG.unit.iss),cat:normTxt(g(r,mp.iss.cat))||'(ohne)',
+      assignee:normName(g(r,mp.iss.assignee)),est:toHours(g(r,mp.iss.est),unitFor('iss',mp.iss.est,CFG.unit.iss)),cat:normTxt(g(r,mp.iss.cat))||'(ohne)',
       submitter:normTxt(g(r,mp.iss.submitter)),inj:toDate(g(r,mp.iss.inj)),booked:0,nb:0};
     o.sc=st(o.state);issues.push(o);byId.set(id,o);
   }
@@ -493,18 +511,27 @@ function build(){
   for(const r of (RAW.wi?.rows||[]).slice(H)){
     const title=normTxt(g(r,mp.wi.title)),id=normId(g(r,mp.wi.id));if(!title&&!id)continue;
     const o={title,id,state:normTxt(g(r,mp.wi.state)),submit:toDate(g(r,mp.wi.submit)),start:toDate(g(r,mp.wi.start)),
-      actual:toDate(g(r,mp.wi.actual)),planned:toDate(g(r,mp.wi.planned)),est:toHours(g(r,mp.wi.est),CFG.unit.wi),
+      actual:toDate(g(r,mp.wi.actual)),planned:toDate(g(r,mp.wi.planned)),est:toHours(g(r,mp.wi.est),unitFor('wi',mp.wi.est,CFG.unit.wi)),
       assignee:normName(g(r,mp.wi.assignee)),sub:normTxt(g(r,mp.wi.sub))||'(ohne)',projIss:normTxt(g(r,mp.wi.projIss))||'(ohne)',
       projRel:normTxt(g(r,mp.wi.projRel))||'(ohne)',issTitle:normTxt(g(r,mp.wi.issTitle))};
     o.sc=st(o.state);
     o.prefix=prefixOf(CFG.prefixSrc==='id'?o.id:o.title);
     wis.push(o);
   }
+  /* Zuordnung Buchung → Issue: erst exakt, dann tolerant (Groß/klein, Leer- und
+     Sonderzeichen), zuletzt über die Nummer – aber nur, wenn sie eindeutig ist. */
+  const kTol=x=>String(x).toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const kNum=x=>{const m=String(x).match(/\d+/g);if(!m)return '';const n=m.sort((a,b)=>b.length-a.length)[0].replace(/^0+/,'');return n||''};
+  const byTol=new Map(),byNum=new Map();
+  if(CFG.idMatch!=='exakt')for(const i of issues){const t=kTol(i.id);byTol.set(t,byTol.has(t)?null:i);const n=kNum(i.id);if(n)byNum.set(n,byNum.has(n)?null:i)}
+  const bkUnit=unitFor('bk',mp.bk.val,CFG.unit.bk);
   const bks=[];
   for(const r of (RAW.bk?.rows||[]).slice(H)){
-    const id=normId(g(r,mp.bk.id));const h=toHours(g(r,mp.bk.val),CFG.unit.bk);if(!id&&!h)continue;
-    const iss=byId.get(id)||null;
-    const b={id,h,date:toDate(g(r,mp.bk.date)),person:mp.bk.person?normName(g(r,mp.bk.person)):null,iss};
+    const roh=g(r,mp.bk.val);
+    const id=normId(g(r,mp.bk.id));const h=toHours(roh,bkUnit);if(!id&&!h)continue;
+    let iss=byId.get(id)||null,how=iss?'exakt':'';
+    if(!iss&&id&&CFG.idMatch!=='exakt'){iss=byTol.get(kTol(id))||null;if(iss)how='schreibweise';else{const n=kNum(id);iss=n?byNum.get(n)||null:null;if(iss)how='nummer'}}
+    const b={id,h,roh,how,date:toDate(g(r,mp.bk.date)),person:mp.bk.person?normName(g(r,mp.bk.person)):null,iss};
     if(iss){iss.booked+=h;iss.nb++}
     bks.push(b);
   }
@@ -515,7 +542,7 @@ function build(){
   const addY=t=>t!=null&&years.add(new Date(t).getUTCFullYear());
   issues.forEach(i=>{addY(i.submit);addY(i.inj)});wis.forEach(w=>{addY(w.actual);addY(w.submit);addY(w.planned)});bks.forEach(b=>addY(b.date));
   const states={iss:countBy(issues,i=>i.state||'(leer)'),wi:countBy(wis,w=>w.state||'(leer)')};
-  D={issues,wis,bks,byId,people:[...people].sort((a,b)=>a.localeCompare(b,'de')),cats,years:[...years].sort(),states};
+  D={bkUnit,issues,wis,bks,byId,people:[...people].sort((a,b)=>a.localeCompare(b,'de')),cats,years:[...years].sort(),states};
 }
 function prefixOf(src){
   const sep=CFG.prefixSep||'-',teile=String(src||'').split(sep);
@@ -892,7 +919,12 @@ function rForecast(c){
 }
 function rQuality(c){
   const items=[];
-  const orphan=D.bks.filter(b=>!b.iss);items.push({k:'Buchungen ohne passendes Issue',n:orphan.length,h:orphan.reduce((a,b)=>a+b.h,0),ex:[...new Set(orphan.map(b=>b.id))].slice(0,8).join(', ')});
+  const n=D.bks.length,cnt=k=>D.bks.filter(b=>b.how===k),hs=a=>a.reduce((s,b)=>s+b.h,0);
+  const ex=cnt('exakt'),sw=cnt('schreibweise'),nu=cnt('nummer'),oh=D.bks.filter(b=>!b.iss);
+  items.push({ok:1,k:'Buchungen exakt zugeordnet',n:ex.length,h:hs(ex),ex:fp(n?ex.length/n:null)+' aller Buchungen'});
+  if(sw.length)items.push({ok:1,k:'… zugeordnet trotz anderer Schreibweise',n:sw.length,h:hs(sw),ex:sw.slice(0,4).map(b=>b.id+' → '+b.iss.id).join(' · ')});
+  if(nu.length)items.push({k:'… zugeordnet nur über die Nummer – bitte prüfen',n:nu.length,h:hs(nu),ex:nu.slice(0,4).map(b=>b.id+' → '+b.iss.id).join(' · ')});
+  const orphan=oh;items.push({k:'Buchungen ohne passendes Issue',n:orphan.length,h:orphan.reduce((a,b)=>a+b.h,0),ex:[...new Set(orphan.map(b=>b.id))].slice(0,8).join(', ')});
   const nob=D.issues.filter(i=>!i.nb);items.push({k:'Issues ohne Buchung',n:nob.length,h:nob.reduce((a,i)=>a+i.est,0),ex:nob.slice(0,8).map(i=>i.id).join(', ')});
   const noe=D.issues.filter(i=>!i.est);items.push({k:'Issues ohne Schätzung',n:noe.length,h:noe.reduce((a,i)=>a+i.booked,0),ex:noe.slice(0,8).map(i=>i.id).join(', ')});
   const nod=D.issues.filter(i=>i.submit==null);items.push({k:'Issues ohne Submit-Datum',n:nod.length,h:nod.reduce((a,i)=>a+i.est,0),ex:nod.slice(0,8).map(i=>i.id).join(', ')});
@@ -901,9 +933,17 @@ function rQuality(c){
   const wn=D.wis.filter(w=>w.actual!=null&&(w.start??w.submit)!=null&&w.actual<(w.start??w.submit));items.push({k:'Workitems mit Abschluss vor Start',n:wn.length,h:wn.reduce((a,w)=>a+w.est,0),ex:wn.slice(0,8).map(w=>w.id||w.title).join(', ')});
   const wo=D.wis.filter(w=>w.sc==='open'&&!w.est);items.push({k:'Offene Workitems ohne Schätzung',n:wo.length,h:0,ex:wo.slice(0,8).map(w=>w.id||w.title).join(', ')});
   const st=[...D.states.wi.entries()].map(([s,n])=>s+' ('+n+')').join(', ');
-  c.top.innerHTML=`<p class="hinweis" style="margin:0 0 6px">Erkannte Workitem-Stati: ${esc(st||'–')} · als closed zählt „${esc(CFG.closed)}“, als canceled „${esc(CFG.canceled)}“ – anpassbar unter Einstellungen.</p>`;
+  const L=CFG.map,bsp=(a,k)=>a.slice(0,6).map(x=>esc(String(x[k]??''))).join(' · ')||'–';
+  const roh=D.bks.slice(0,6).map(b=>esc(typeof b.roh==='number'?String(+b.roh.toFixed(4)).replace('.',','):JSON.stringify(b.roh??''))+' → '+nf1.format(b.h)+' h').join(' · ');
+  const zeitHinweis=D.bkUnit==='xt'?' <b>Spalte '+esc(L.bk.val)+' ist als Uhrzeit/Dauer formatiert – wird mal 24 in Stunden umgerechnet.</b>':
+    (D.bks.length>5&&D.bks.filter(b=>b.h>0&&b.h<1.5).length>D.bks.length*.7?' <b>Fast alle Werte liegen unter 1,5 h – ist die Spalte vielleicht eine Excel-Dauer oder in Tagen? Einheit unter Einstellungen ändern.</b>':'');
+  const blatt=k=>RAW[k]?.others?' · Blatt „'+esc(RAW[k].sheet)+'“ (weitere: '+Object.entries(RAW[k].others).map(([a,b])=>esc(a)+' '+b+' Z.').join(', ')+')':'';
+  const abgl=`<div class="abgl"><div><span class="t-idx">Issue-ID · Datei 1, Spalte ${esc(L.iss.id)}${blatt('iss')}</span><p>${bsp(D.issues,'id')}</p></div>
+    <div><span class="t-idx">Buchungs-ID · Datei 3, Spalte ${esc(L.bk.id)}${blatt('bk')}</span><p>${bsp(D.bks,'id')}</p></div>
+    <div><span class="t-idx">Aufwand · Datei 3, Spalte ${esc(L.bk.val)} · Rohwert → Stunden</span><p>${roh||'–'}${zeitHinweis}</p></div></div>`;
+  c.top.innerHTML=abgl+`<p class="hinweis" style="margin:0 0 6px">Erkannte Workitem-Stati: ${esc(st||'–')} · als closed zählt „${esc(CFG.closed)}“, als canceled „${esc(CFG.canceled)}“ – anpassbar unter Einstellungen.</p>`;
   c.chart.innerHTML='';
-  c.table(table(c.id,[{k:'k',l:'Prüfung'},{k:'n',l:'Anzahl',n:1,cls:r=>r.n?'neg':'pos'},{k:'h',l:'Aufwand h',n:1,f:v=>nf1.format(v)},{k:'ex',l:'Beispiele',html:r=>`<div class="trunc" style="max-width:520px" title="${esc(r.ex)}">${esc(r.ex||'–')}</div>`}],items));
+  c.table(table(c.id,[{k:'k',l:'Prüfung'},{k:'n',l:'Anzahl',n:1,cls:r=>r.ok?'':r.n?'neg':'pos'},{k:'h',l:'Aufwand h',n:1,f:v=>nf1.format(v)},{k:'ex',l:'Beispiele',html:r=>`<div class="trunc" style="max-width:520px" title="${esc(r.ex)}">${esc(r.ex||'–')}</div>`}],items));
   c.tableOpen=true;
 }
 
@@ -1007,7 +1047,8 @@ function openSettings(){
   const head=k=>{const r=RAW[k]?.rows?.[0];return r||[]};
   const opt=(k,f,v,optional)=>{const hd=head(k);return (optional?'<option value="">— keine —</option>':'')+LETTERS.map((L,i)=>`<option value="${L}" ${L===v?'selected':''}>${L}${CFG.header&&hd[i]!=null?' · '+esc(String(hd[i]).slice(0,22)):''}</option>`).join('')};
   const block=k=>`<h4>${FILE_NAMES[k]} – Spalten</h4><div class="map">${FIELDS[k].map(([f,l])=>`<label>${esc(l)}<select data-map="${k}.${f}">${opt(k,f,CFG.map[k][f],k==='bk'&&(f==='date'||f==='person'))}</select></label>`).join('')}
-    <label>Aufwand-Einheit<select data-unit="${k}"><option value="h" ${CFG.unit[k]==='h'?'selected':''}>Stunden</option><option value="d" ${CFG.unit[k]==='d'?'selected':''}>Personentage</option></select></label></div>`;
+    <label>Aufwand-Einheit<select data-unit="${k}">${[['h','Stunden'],['d','Personentage'],['min','Minuten'],['xt','Excel-Dauer [h]:mm']].map(([v,l])=>`<option value="${v}" ${CFG.unit[k]===v?'selected':''}>${l}</option>`).join('')}</select></label>
+    ${RAW[k]?.sheetNames?.length>1?`<label>Tabellenblatt<select data-sheet="${k}"><option value="">automatisch (größtes)</option>${RAW[k].sheetNames.map(n=>`<option ${CFG.sheet?.[k]===n?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`:''}</div>`;
   const ppl=(D?.people||Object.keys(CFG.people)).map(p=>`<tr><td>${esc(p)}</td><td><input data-pd="${esc(p)}" value="${esc(CFG.people[p]?.dept||'')}" placeholder="z. B. SW-Entwicklung"></td><td><input class="num" data-pw="${esc(p)}" inputmode="decimal" value="${esc(String(CFG.people[p]?.wh||''))}" placeholder="${esc(String(CFG.weekly))}"></td></tr>`).join('');
   $('#setBody').innerHTML=`
     <h4>Allgemein</h4><div class="map">
@@ -1016,6 +1057,7 @@ function openSettings(){
       <label>Wochenarbeitszeit Standard (h)<input id="sWeekly" inputmode="decimal" value="${CFG.weekly}"></label>
       <label>Status „closed“<input id="sClosed" value="${esc(CFG.closed)}"></label>
       <label>Status „canceled“<input id="sCanceled" value="${esc(CFG.canceled)}"></label>
+      <label>Issue-ID abgleichen<select id="sIdMatch"><option value="tolerant" ${CFG.idMatch!=='exakt'?'selected':''}>tolerant (Schreibweise, Nummer)</option><option value="exakt" ${CFG.idMatch==='exakt'?'selected':''}>nur exakt</option></select></label>
       <label>Präfix aus<select id="sPrefixSrc"><option value="title" ${CFG.prefixSrc==='title'?'selected':''}>Workitem-Titel</option><option value="id" ${CFG.prefixSrc==='id'?'selected':''}>Workitem-ID</option></select></label>
       <label>Präfix-Teil<select id="sPrefixPart"><option value="2" ${+CFG.prefixPart===2?'selected':''}>zwischen 1. und 2. Trenner</option><option value="1" ${+CFG.prefixPart===1?'selected':''}>bis zum 1. Trenner</option></select></label>
       <label>Trenner<input id="sPrefixSep" value="${esc(CFG.prefixSep)}"></label>
@@ -1031,7 +1073,9 @@ function openSettings(){
 function saveSettings(){
   $$('[data-map]').forEach(s=>{const [k,f]=s.dataset.map.split('.');CFG.map[k][f]=s.value});
   $$('[data-unit]').forEach(s=>CFG.unit[s.dataset.unit]=s.value);
-  CFG.header=$('#sHeader').value==='1';
+  CFG.header=$('#sHeader').value==='1';CFG.idMatch=$('#sIdMatch').value;
+  let blattNeu=false;$$('[data-sheet]').forEach(s=>{const k=s.dataset.sheet;if((CFG.sheet[k]||'')!==s.value){CFG.sheet[k]=s.value;blattNeu=true}});
+  if(blattNeu)toast('Neues Tabellenblatt gilt ab dem nächsten Einlesen der Datei');
   const num=(v,d)=>{const n=parseFloat(String(v).replace(',','.'));return isFinite(n)&&n>0?n:d};
   CFG.hpd=num($('#sHpd').value,8);CFG.weekly=num($('#sWeekly').value,40);
   CFG.closed=$('#sClosed').value;CFG.canceled=$('#sCanceled').value;CFG.prefixSrc=$('#sPrefixSrc').value;CFG.prefixSep=$('#sPrefixSep').value||'-';CFG.prefixPart=+$('#sPrefixPart').value;
