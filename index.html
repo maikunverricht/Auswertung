@@ -154,12 +154,23 @@ input[type=checkbox]{accent-color:var(--amber);width:15px;height:15px}
 .gruppe{display:flex;align-items:baseline;gap:14px;margin:34px 0 12px;padding-bottom:8px;border-bottom:1px solid var(--line)}
 .gruppe h2{margin:0;font-size:15px;letter-spacing:-.01em;font-weight:700;font-variation-settings:'wdth' 110;white-space:nowrap}
 .gruppe p{margin:0;font-size:13px;color:var(--text-3)}
-.reports{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.reports{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
 .card{padding:14px 16px 12px;min-width:0;animation:fade .6s ease both}
 .card.wide{grid-column:1/-1}
 .card[hidden]{display:none}
+.klapp{flex:none;width:26px;height:26px;margin:-2px 0 0 -4px;border-radius:100px;border:1px solid transparent;background:transparent;cursor:pointer;
+  color:var(--text-3);display:grid;place-items:center;padding:0;transition:border-color var(--t-s),color var(--t-s),transform var(--t-m) var(--kurve)}
+.klapp svg{width:15px;height:15px}
+.klapp:hover{border-color:var(--line-hi);color:var(--text)}
+.zu > .klapp,.zu .c-head > .klapp{transform:rotate(-90deg)}
+[data-klapp]{cursor:pointer}
+.gruppe .klapp{align-self:center}
+.reports.zu{display:none}
+.card.zu .c-body,.card.zu .c-ctl,.card.zu [data-csv]{display:none}
+.card.zu{padding-bottom:6px}
+.card.zu .c-head{margin-bottom:6px}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}}
-.c-head{display:flex;align-items:flex-start;gap:10px;margin-bottom:8px}
+.c-head{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px}
 .c-head h3{margin:1px 0 0;font-size:17px;letter-spacing:-.02em;font-weight:700;font-variation-settings:'wdth' 108;line-height:1.2}
 .c-head .c-nm{flex:1;min-width:0}
 .c-head .c-sub{font-size:12.5px;color:var(--text-3);margin:3px 0 0;line-height:1.4}
@@ -289,6 +300,8 @@ footer.pf{position:relative;z-index:1;max-width:var(--max);margin:0 auto;padding
           <p class="ans-kopf">Berichte anzeigen</p>
           <div id="ansWahl"></div>
           <div class="ms-act"><button class="pill sm" id="ansAlle" type="button">Alle</button><button class="pill sm" id="ansKeine" type="button">Keine</button></div>
+          <p class="ans-kopf" style="margin-top:12px">Einklappen</p>
+          <div class="ms-act"><button class="pill sm" id="klappZu" type="button">Alle zu</button><button class="pill sm" id="klappAuf" type="button">Alle auf</button></div>
         </div>
       </div>
       <button class="pill icon-btn" id="themeBtn" type="button" aria-label="Hell/Dunkel umschalten">
@@ -366,7 +379,7 @@ break;case"<bookViews":;case"<bookViews>":;case"</bookViews>":break;case"<workbo
    rechnet die Berichte und zeichnet sie als SVG. Kein Aufruf nach draußen. */
 
 const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
-const LS={cfg:'wb-ausw-cfg',raw:'wb-ausw-raw',filt:'wb-ausw-filt',hid:'wb-ausw-hidden',open:'wb-ausw-open'};
+const LS={zu:'wb-ausw-zu',cfg:'wb-ausw-cfg',raw:'wb-ausw-raw',filt:'wb-ausw-filt',hid:'wb-ausw-hidden',open:'wb-ausw-open'};
 const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -405,6 +418,8 @@ let RAW=lsGet(LS.raw,{});
 let FILT=Object.assign({noBk:false,year:'all',asg:null,issDate:'submit',wiDate:'actual',dept:'map',cats:null},lsGet(LS.filt,{}));
 let HID=new Set(lsGet(LS.hid,[]));
 let OPEN=new Set(lsGet(LS.open,[]));
+let ZU=new Set(lsGet(LS.zu,[]));   // eingeklappt: 'g:<gruppe>' bzw. 'c:<bericht>'
+const PFEIL='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
 let D=null;           // aufbereitete Daten
 const LOCAL={horizon:1,leadBasis:'start',leadMin:1,trendPrefix:'*',asgYearMetric:'h'};
 
@@ -916,14 +931,14 @@ function renderAll(){
   renderFilters();renderKpis();
   let html='',last=null;
   for(const r of REPORTS){
-    if(r.grp!==last){if(last)html+='</div>';html+=`<div class="gruppe" data-g="${r.grp}"><h2>${GROUPS[r.grp][0]}</h2><p>${GROUPS[r.grp][1]}</p></div><div class="reports" data-g="${r.grp}">`;last=r.grp}
-    html+=`<section class="card glass${r.wide?' wide':''}" data-r="${r.id}" ${HID.has(r.id)?'hidden':''}>
-      <div class="c-head"><div class="c-nm"><h3>${esc(r.title)}</h3><p class="c-sub"></p></div>
+    if(r.grp!==last){if(last)html+='</div>';{const zu=ZU.has('g:'+r.grp);html+=`<div class="gruppe${zu?' zu':''}" data-g="${r.grp}"><button class="klapp" type="button" data-klapp="g:${r.grp}" aria-expanded="${!zu}" aria-label="${GROUPS[r.grp][0]} ein- oder ausklappen">${PFEIL}</button><h2 data-klapp="g:${r.grp}">${GROUPS[r.grp][0]}</h2><p>${GROUPS[r.grp][1]}</p></div><div class="reports${zu?' zu':''}" data-g="${r.grp}">`};last=r.grp}
+    {const zu=ZU.has('c:'+r.id);html+=`<section class="card glass${r.wide?' wide':''}${zu?' zu':''}" data-r="${r.id}" ${HID.has(r.id)?'hidden':''}>
+      <div class="c-head"><button class="klapp" type="button" data-klapp="c:${r.id}" aria-expanded="${!zu}" aria-label="Bericht ein- oder ausklappen">${PFEIL}</button><div class="c-nm"><h3 data-klapp="c:${r.id}">${esc(r.title)}</h3><p class="c-sub"></p></div>
       <div class="c-tools"><span class="c-ctl" style="display:contents"></span><button class="pill sm" data-csv="${r.id}" type="button" title="Tabelle in die Zwischenablage (für Excel)">Kopieren</button><button class="x" data-hide="${r.id}" type="button" title="Ausblenden" aria-label="Bericht ausblenden">×</button></div></div>
-      <div class="c-top"></div><div class="chart"></div><div class="c-tbl"></div></section>`;
+      <div class="c-body"><div class="c-top"></div><div class="chart"></div><div class="c-tbl"></div></div></section>`;}
   }
   html+='</div>';host.innerHTML=html;
-  for(const r of REPORTS)if(!HID.has(r.id))renderCard(r);
+  for(const r of REPORTS)if(sichtbar(r))renderCard(r);
   syncGroups();renderAns();
 }
 function renderCard(r){
@@ -935,7 +950,18 @@ function renderCard(r){
   const open=OPEN.has(r.id)||(c.tableOpen&&!OPEN.has('!'+r.id));
   $('.c-tbl',el).innerHTML=c._t?`<details class="tbl" data-d="${r.id}" ${open?'open':''}><summary>Tabelle</summary>${c._t}</details>`:'';
 }
-function rerender(ids){TIPS.clear();renderKpis();for(const r of REPORTS)if(!HID.has(r.id)&&(!ids||ids.includes(r.id)))renderCard(r)}
+const sichtbar=r=>!HID.has(r.id)&&!ZU.has('c:'+r.id)&&!ZU.has('g:'+r.grp);
+function rerender(ids){TIPS.clear();renderKpis();for(const r of REPORTS){const el=$(`[data-r="${r.id}"]`);if(el)el.dataset.alt='1';if(sichtbar(r)&&(!ids||ids.includes(r.id))){renderCard(r);if(el)delete el.dataset.alt}}}
+function klappen(key,zu){
+  if(zu===undefined)zu=!ZU.has(key);
+  if(zu)ZU.add(key);else ZU.delete(key);lsSet(LS.zu,[...ZU]);
+  const [art,id]=key.split(':');
+  if(art==='g'){$$(`[data-g="${id}"]`).forEach(e=>e.classList.toggle('zu',zu));$(`.gruppe[data-g="${id}"] .klapp`)?.setAttribute('aria-expanded',String(!zu));
+    if(!zu)REPORTS.filter(r=>r.grp===id&&sichtbar(r)).forEach(r=>{const el=$(`[data-r="${r.id}"]`);if(el&&(!$('.chart',el).innerHTML&&!$('.c-tbl',el).innerHTML||el.dataset.alt)){renderCard(r);delete el.dataset.alt}})}
+  else{const el=$(`[data-r="${id}"]`);if(!el)return;el.classList.toggle('zu',zu);$('.klapp',el).setAttribute('aria-expanded',String(!zu));
+    const r=REPORTS.find(x=>x.id===id);if(!zu&&sichtbar(r)&&(el.dataset.alt||(!$('.chart',el).innerHTML&&!$('.c-tbl',el).innerHTML))){renderCard(r);delete el.dataset.alt}}
+}
+function alleKlappen(zu){Object.keys(GROUPS).forEach(g=>klappen('g:'+g,zu));REPORTS.forEach(r=>klappen('c:'+r.id,zu))}
 function syncGroups(){for(const g of Object.keys(GROUPS)){const any=REPORTS.some(r=>r.grp===g&&!HID.has(r.id));$$(`[data-g="${g}"]`).forEach(e=>e.hidden=!any)}}
 function renderStats(){
   const parts=[];for(const k of['iss','wi','bk']){const r=RAW[k];parts.push(`<span>${FILE_NAMES[k]} <b>${r?nf0.format(Math.max(0,r.rows.length-(CFG.header?1:0))):'–'}</b></span>`)}
@@ -968,7 +994,7 @@ function renderAns(){
 }
 function setHidden(id,h){
   if(h)HID.add(id);else HID.delete(id);lsSet(LS.hid,[...HID]);
-  const el=$(`[data-r="${id}"]`);if(el){el.hidden=h;if(!h){const r=REPORTS.find(x=>x.id===id);renderCard(r)}}
+  const el=$(`[data-r="${id}"]`);if(el){el.hidden=h;if(!h){const r=REPORTS.find(x=>x.id===id);if(sichtbar(r))renderCard(r)}}
   syncGroups();renderAns();
 }
 function saveFilt(){lsSet(LS.filt,FILT)}
@@ -1094,12 +1120,14 @@ function bind(){
     if(!e.target.closest('.ms'))$$('.ms-panel').forEach(x=>x.hidden=true);
     if(!e.target.closest('.ans-menue')){$('#ansPanel').hidden=true;$('#ansBtn').setAttribute('aria-expanded','false')}
     const h=e.target.closest('[data-hide]');if(h){setHidden(h.dataset.hide,true);toast('Ausgeblendet – über „Ansichten“ wieder einblenden')}
+    const kl=e.target.closest('[data-klapp]');if(kl){klappen(kl.dataset.klapp);return}
     if(e.target.closest('.lg-bk'))bkUmschalten();
     const c=e.target.closest('[data-csv]');if(c)csv(c.dataset.csv);
     const th=e.target.closest('[data-tbl] th');if(th){const id=th.closest('[data-tbl]').dataset.tbl,t=TABLES[id];t.sort={k:th.dataset.k,d:t.sort?.k===th.dataset.k?-t.sort.d:-1};th.closest('[data-tbl]').innerHTML=tableInner(id)}
   });
   $('#ansBtn').onclick=e=>{e.stopPropagation();const p=$('#ansPanel');p.hidden=!p.hidden;$('#ansBtn').setAttribute('aria-expanded',String(!p.hidden))};
   $('#ansPanel').onchange=e=>{const id=e.target.dataset.ans;if(id)setHidden(id,!e.target.checked)};
+  $('#klappZu').onclick=()=>alleKlappen(true);$('#klappAuf').onclick=()=>alleKlappen(false);
   $('#ansAlle').onclick=()=>{REPORTS.forEach(r=>HID.delete(r.id));lsSet(LS.hid,[]);renderAll()};
   $('#ansKeine').onclick=()=>{REPORTS.forEach(r=>HID.add(r.id));lsSet(LS.hid,[...HID]);renderAll()};
   $('#reports').addEventListener('change',e=>{
