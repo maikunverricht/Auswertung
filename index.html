@@ -390,7 +390,7 @@ const DEF={
   unit:{iss:'h',wi:'h',bk:'h'},
   hpd:8, weekly:40,
   closed:'closed', canceled:'canceled, cancelled',
-  prefixSrc:'title', prefixSep:'-',
+  prefixSrc:'title', prefixSep:'-', prefixPart:2,
   people:{}
 };
 const FIELDS={
@@ -482,8 +482,7 @@ function build(){
       assignee:normName(g(r,mp.wi.assignee)),sub:normTxt(g(r,mp.wi.sub))||'(ohne)',projIss:normTxt(g(r,mp.wi.projIss))||'(ohne)',
       projRel:normTxt(g(r,mp.wi.projRel))||'(ohne)',issTitle:normTxt(g(r,mp.wi.issTitle))};
     o.sc=st(o.state);
-    const src=CFG.prefixSrc==='id'?o.id:o.title, sep=CFG.prefixSep||'-', p=src.indexOf(sep);
-    o.prefix=p>0?src.slice(0,p).trim():'(ohne Präfix)';
+    o.prefix=prefixOf(CFG.prefixSrc==='id'?o.id:o.title);
     wis.push(o);
   }
   const bks=[];
@@ -503,6 +502,12 @@ function build(){
   const states={iss:countBy(issues,i=>i.state||'(leer)'),wi:countBy(wis,w=>w.state||'(leer)')};
   D={issues,wis,bks,byId,people:[...people].sort((a,b)=>a.localeCompare(b,'de')),cats,years:[...years].sort(),states};
 }
+function prefixOf(src){
+  const sep=CFG.prefixSep||'-',teile=String(src||'').split(sep);
+  if(+CFG.prefixPart===2){const p=teile.length>=3?teile[1].trim():'';return p||'(ohne Präfix)'}
+  const p=teile.length>=2?teile[0].trim():'';return p||'(ohne Präfix)';
+}
+function prefixTxt(){const s=CFG.prefixSep||'-';return (CFG.prefixSrc==='id'?'ID':'Titel')+(+CFG.prefixPart===2?' zwischen 1. und 2. „'+s+'“':' bis zum ersten „'+s+'“')}
 function countBy(arr,f){const m=new Map();for(const x of arr){const k=f(x);m.set(k,(m.get(k)||0)+1)}return m}
 
 /* ─── Filter-Helfer ────────────────────────────────────────── */
@@ -719,7 +724,7 @@ const REPORTS=[
  {id:'wiDept',grp:'wi',title:'Anteil pro Abteilung pro Jahr',sub:()=>'Abteilung aus: '+$('#fDept').selectedOptions[0].text,render:rWiDept},
  {id:'wiAsg',grp:'wi',title:'Anteil pro Assignee',sub:()=>yearTxt()+' · Anteil am Workitem-Aufwand',render:rWiAsg},
  {id:'onTime',grp:'wi',title:'Termintreue',sub:()=>yearTxt()+' · abgeschlossen bis zum geplanten Datum',render:rOnTime},
- {id:'leadPrefix',grp:'lead',wide:true,title:'Durchlaufzeit nach Präfix',sub:()=>'Präfix = '+(CFG.prefixSrc==='id'?'ID':'Titel')+' bis „'+(CFG.prefixSep||'-')+'“ · '+yearTxt('Abschluss'),render:rLeadPrefix},
+ {id:'leadPrefix',grp:'lead',wide:true,title:'Durchlaufzeit nach Präfix',sub:()=>'Präfix = '+prefixTxt()+' · '+yearTxt('Abschluss'),render:rLeadPrefix},
  {id:'leadTrend',grp:'lead',title:'Durchlaufzeit im Verlauf',sub:()=>'Median und Durchschnitt je Abschlussmonat',render:rLeadTrend},
  {id:'leadDist',grp:'lead',title:'Verteilung der Durchlaufzeit',sub:()=>'Anzahl Workitems je Zeitspanne',render:rLeadDist},
  {id:'forecast',grp:'fc',wide:true,title:'Current Forecast',sub:()=>'Offene Workitems (nicht closed, nicht canceled) je Assignee gegen Wochenarbeitszeit · Jahresfilter gilt hier nicht',render:rForecast},
@@ -986,7 +991,8 @@ function openSettings(){
       <label>Status „closed“<input id="sClosed" value="${esc(CFG.closed)}"></label>
       <label>Status „canceled“<input id="sCanceled" value="${esc(CFG.canceled)}"></label>
       <label>Präfix aus<select id="sPrefixSrc"><option value="title" ${CFG.prefixSrc==='title'?'selected':''}>Workitem-Titel</option><option value="id" ${CFG.prefixSrc==='id'?'selected':''}>Workitem-ID</option></select></label>
-      <label>Präfix endet bei<input id="sPrefixSep" value="${esc(CFG.prefixSep)}"></label>
+      <label>Präfix-Teil<select id="sPrefixPart"><option value="2" ${+CFG.prefixPart===2?'selected':''}>zwischen 1. und 2. Trenner</option><option value="1" ${+CFG.prefixPart===1?'selected':''}>bis zum 1. Trenner</option></select></label>
+      <label>Trenner<input id="sPrefixSep" value="${esc(CFG.prefixSep)}"></label>
     </div>
     <p class="hinweis">Mehrere Statusnamen mit Komma trennen. Groß-/Kleinschreibung zählt nicht. Aufwände wie „2d 4h“ werden ebenfalls erkannt.</p>
     ${block('iss')}${block('wi')}${block('bk')}
@@ -1002,7 +1008,7 @@ function saveSettings(){
   CFG.header=$('#sHeader').value==='1';
   const num=(v,d)=>{const n=parseFloat(String(v).replace(',','.'));return isFinite(n)&&n>0?n:d};
   CFG.hpd=num($('#sHpd').value,8);CFG.weekly=num($('#sWeekly').value,40);
-  CFG.closed=$('#sClosed').value;CFG.canceled=$('#sCanceled').value;CFG.prefixSrc=$('#sPrefixSrc').value;CFG.prefixSep=$('#sPrefixSep').value||'-';
+  CFG.closed=$('#sClosed').value;CFG.canceled=$('#sCanceled').value;CFG.prefixSrc=$('#sPrefixSrc').value;CFG.prefixSep=$('#sPrefixSep').value||'-';CFG.prefixPart=+$('#sPrefixPart').value;
   $$('[data-pd]').forEach(i=>{const p=i.dataset.pd;CFG.people[p]=CFG.people[p]||{};CFG.people[p].dept=i.value.trim()});
   $$('[data-pw]').forEach(i=>{const p=i.dataset.pw;CFG.people[p]=CFG.people[p]||{};CFG.people[p].wh=i.value.trim()});
   lsSet(LS.cfg,CFG);$('#dlgSet').close();build();renderAll();toast('Einstellungen übernommen');
@@ -1029,7 +1035,7 @@ function demo(){
     for(let k=0;k<nw;k++){
       const p=pick(pre),st=sub+Math.floor(rnd()*20)*DAY,dur={SWE:25,SYS:18,TST:12,REV:5,DOC:8,INT:15}[p]*(0.3+rnd()*1.6),act=st+dur*DAY,pl=st+({SWE:25,SYS:18,TST:12,REV:5,DOC:8,INT:15}[p])*DAY;
       const closed=act<now&&rnd()>.08,canc=!closed&&rnd()<.1;
-      wi.push([p+'-'+pick(['Umsetzung','Review','Test','Analyse','Doku'])+' '+t,closed?'closed':canc?'canceled':pick(['open','in progress','planned']),'WI-'+(50000+wi.length),xl(sub),xl(st),closed?xl(act):null,xl(pl),Math.round(est/nw*(0.5+rnd())),
+      wi.push([pick(['AT7','EAT2','SCR4'])+'-'+p+'-'+pick(['Umsetzung','Review','Test','Analyse','Doku'])+' '+t,closed?'closed':canc?'canceled':pick(['open','in progress','planned']),'WI-'+(50000+wi.length),xl(sub),xl(st),closed?xl(act):null,xl(pl),Math.round(est/nw*(0.5+rnd())),
         rnd()<.85?a:pick(ppl),pick(['Software','System','Test','Qualität']),'P-'+pick(['AT7','EAT2','SCR4']),'R-'+pick(['24.1','25.2','26.1']),t]);
     }
   }
