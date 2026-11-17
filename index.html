@@ -148,6 +148,7 @@ input[type=checkbox]{accent-color:var(--amber);width:15px;height:15px}
 .kpi{background:var(--surface);padding:12px 14px}
 .kpi dt{font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--text-3)}
 .kpi dd{margin:3px 0 0;font-size:22px;letter-spacing:-.03em;font-weight:700;font-variation-settings:'wdth' 108;line-height:1.2}
+.kpi dd.warn{color:var(--over)}
 .kpi small{display:block;font-family:var(--mono);font-size:11px;color:var(--text-3);margin-top:2px}
 
 /* Berichte */
@@ -422,7 +423,7 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
       <div class="ms-panel" id="fAsgPanel" hidden></div></span>
     <span class="fl">Issue-Datum <select class="sel" id="fIssDate"><option value="submit">Submit</option><option value="inj">Defekt-Injektion</option></select></span>
     <span class="fl">Workitem-Datum <select class="sel" id="fWiDate"><option value="actual">Abschluss (actual)</option><option value="submit">Submit</option><option value="start">Start</option><option value="planned">Geplant</option></select></span>
-    <span class="fl">Abteilung aus <select class="sel" id="fDept"><option value="map">Zuordnung Person</option><option value="sub">Subcategory</option><option value="projIss">Projekt-ID Issue</option><option value="projRel">Projekt-ID Release</option></select></span>
+    <span class="fl">Abteilung aus <select class="sel" id="fDept"><option value="klammer">Assignee (Klammer)</option><option value="map">Zuordnung Person</option><option value="sub">Subcategory</option><option value="projIss">Projekt-ID Issue</option><option value="projRel">Projekt-ID Release</option></select></span>
     <span class="fl">Anzeige <button class="pill sm on" id="fBk" type="button" aria-pressed="true" title="Abgerechneten Aufwand ein- oder ausblenden">Abgerechnet an</button></span>
     <span class="fl ms">Defekt-Kategorie <button class="sel" id="fCatBtn" type="button" style="min-width:120px;text-align:left">automatisch</button>
       <div class="ms-panel" id="fCatPanel" hidden></div></span>
@@ -533,7 +534,8 @@ const FILE_NAMES={iss:'Issues',wi:'Workitems',bk:'Gebuchter Aufwand'};
 
 let CFG=merge(structuredClone(DEF),lsGet(LS.cfg,{}));
 let RAW=lsGet(LS.raw,{});
-let FILT=Object.assign({noBk:false,year:'all',asg:null,issDate:'submit',wiDate:'actual',dept:'map',cats:null},lsGet(LS.filt,{}));
+let FILT=Object.assign({noBk:false,year:'all',asg:null,issDate:'submit',wiDate:'actual',dept:'klammer',cats:null},lsGet(LS.filt,{}));
+if(!FILT.deptV2){FILT.deptV2=1;if(FILT.dept==='map')FILT.dept='klammer'}   // seit 17.11.: Abteilung aus der Klammer im Assignee
 let HID=new Set(lsGet(LS.hid,[]));
 let OPEN=new Set(lsGet(LS.open,[]));
 let ZU=new Set(lsGet(LS.zu,[]).filter(k=>!k.startsWith('g:')));
@@ -703,8 +705,15 @@ const yearOk=t=>FILT.year==='all'||(t!=null&&yOf(t)===+FILT.year);
 const issDate=i=>FILT.issDate==='inj'?(i.inj??i.submit):i.submit;
 function wiDate(w){const o={actual:['actual','planned','start','submit'],submit:['submit'],start:['start','submit'],planned:['planned','submit']}[FILT.wiDate];for(const k of o)if(w[k]!=null)return w[k];return null}
 function defCats(){if(FILT.cats)return new Set(FILT.cats);return new Set(D.cats.filter(c=>/defe[ck]t|bug|fehler|error|failure/i.test(c)))}
+/* Abteilung steht im Assignee in Klammern: „Max Muster (EDS-SW3)“ → „EDS-SW3“. Die letzte Klammer zählt. */
+const klammer=n=>{const m=String(n||'').match(/\(([^()]*)\)[^()]*$/);return m&&m[1].trim()?m[1].trim():''};
+function deptName(person){
+  if(FILT.dept==='klammer')return klammer(person)||'(ohne Abteilung)';
+  if(FILT.dept==='map'){const d=CFG.people[person]?.dept;return d&&d.trim()?d.trim():(klammer(person)||'(nicht zugeordnet)')}
+  return '';
+}
 function deptOf(w){
-  if(FILT.dept==='map'){const d=CFG.people[w.assignee]?.dept;return d&&d.trim()?d.trim():'(nicht zugeordnet)'}
+  if(FILT.dept==='klammer'||FILT.dept==='map')return deptName(w.assignee);
   return w[FILT.dept];
 }
 const whOf=n=>{const v=parseFloat(String(CFG.people[n]?.wh??'').replace(',','.'));return isFinite(v)&&v>0?v:+CFG.weekly||40};
@@ -996,7 +1005,7 @@ function rWiDept(c){
 function rWiAsg(c){
   const M=new Map();let tot=0;
   for(const w of D.wis){if(!asgOk(w.assignee)||w.sc==='canceled'||!yearOk(wiDate(w)))continue;if(!M.has(w.assignee))M.set(w.assignee,{a:w.assignee,h:0,n:0,c:0});const o=M.get(w.assignee);o.h+=w.est;o.n++;if(w.sc==='closed')o.c++;tot+=w.est}
-  const rows=[...M.values()].map(r=>Object.assign(r,{p:tot?r.h/tot:0,dept:FILT.dept==='map'?(CFG.people[r.a]?.dept||''):''})).sort((a,b)=>b.h-a.h);
+  const rows=[...M.values()].map(r=>Object.assign(r,{p:tot?r.h/tot:0,dept:deptName(r.a)})).sort((a,b)=>b.h-a.h);
   c.top.innerHTML=legend([{name:'Anteil am Workitem-Aufwand',color:'var(--c3)'}]);
   hbars(c.chart,rows.slice(0,25).map(r=>({label:r.a,vals:[{v:r.p,color:'var(--c3)',name:'Anteil'}],text:fp(r.p)+' · '+fh(r.h),tip:`<b>${esc(r.a)}</b>`+tipRow('var(--c3)','Anteil',fp(r.p))+tipRow('','Aufwand',fh(r.h))+tipRow('','Workitems',nf0.format(r.n)+' ('+nf0.format(r.c)+' closed)')})),{vw:130,fmt:fp});
   c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'dept',l:'Abteilung'},{k:'n',l:'Workitems',n:1},{k:'c',l:'closed',n:1},{k:'h',l:'Aufwand h',n:1,f:v=>nf1.format(v)},{k:'p',l:'Anteil',n:1,f:v=>fp(v)}],rows,{sum:{a:'Summe',n:rows.reduce((a,r)=>a+r.n,0),c:rows.reduce((a,r)=>a+r.c,0),h:tot,p:tot?1:0}}));
@@ -1050,7 +1059,7 @@ function rForecast(c){
   const today=Date.now(),M=new Map();
   for(const w of D.wis){if(w.sc!=='open'||!asgOk(w.assignee))continue;if(!M.has(w.assignee))M.set(w.assignee,{a:w.assignee,n:0,h:0,od:0,noest:0});const o=M.get(w.assignee);o.n++;o.h+=w.est;if(!w.est)o.noest++;if(w.planned!=null&&w.planned<today)o.od++}
   const hz=+LOCAL.horizon;
-  const rows=[...M.values()].map(r=>{const wh=whOf(r.a),cap=wh*hz;return Object.assign(r,{dept:CFG.people[r.a]?.dept||'',wh,cap,d:cap-r.h,wk:wh?r.h/wh:null,u:cap?r.h/cap:null})}).sort((a,b)=>a.d-b.d);
+  const rows=[...M.values()].map(r=>{const wh=whOf(r.a),cap=wh*hz;return Object.assign(r,{dept:deptName(r.a)||klammer(r.a),wh,cap,d:cap-r.h,wk:wh?r.h/wh:null,u:cap?r.h/cap:null})}).sort((a,b)=>a.d-b.d);
   c.top.innerHTML=legend([{name:'Offener Aufwand',color:'var(--c2)'},{name:'über Kapazität',color:'var(--c4)'},{name:'Kapazität ('+(hz===1?'1 Woche':hz+' Wochen')+')',color:'var(--text)',shape:'ln'}]);
   bullet(c.chart,rows.map(r=>({label:r.a,load:r.h,cap:r.cap,n:r.n})));
   const S={a:'Summe',n:0,h:0,wh:0,cap:0,d:0,od:0};rows.forEach(r=>{S.n+=r.n;S.h+=r.h;S.wh+=r.wh;S.cap+=r.cap;S.d+=r.d;S.od+=r.od});S.wk=S.wh?S.h/S.wh:null;S.u=S.cap?S.h/S.cap:null;
@@ -1112,7 +1121,7 @@ const INFO={
  overrun:()=>[['Rechnung','Je Issue: gesamter abgerechneter Aufwand minus Estimated Effort. Positiv = überschritten.'],['Abgerechnet',bookTxt()],['Anzeige','Grafik: die 10 größten Überschreitungen. Tabelle: alle Issues mit Plan oder Ist.'],['Filter','Jahr (nach '+issD()+'), Assignee.']],
  defLat:()=>[['Rechnung','Je Defekt: Submit-Datum (Spalte '+CFG.map.iss.submit+') minus Defekt-Injektions-Datum (Spalte '+CFG.map.iss.inj+'), in Kalendertagen.'],['Auswahl','Issues der Kategorie '+defTxt()+' mit beiden Daten; negative Abstände fallen weg.'],['Gruppe','Jahr des Submits. Je Jahr Durchschnitt, Median, 85-%-Wert und Maximum.'],['Filter','Assignee. Zeigt immer alle Jahre.']],
  wiYear:()=>[['Rechnung','Summe Estimated Effort (Datei 2, Spalte '+CFG.map.wi.est+') je Jahr.'],['Jahr nach',wiDTxt()+'.'],['Aufteilung','Gesamt enthält closed, offene und canceled; die Tabelle zeigt sie getrennt.'],['Filter','Assignee, Workitem-Datum. Zeigt immer alle Jahre.']],
- wiDept:()=>[['Rechnung','Anteil der Abteilung am Estimated Effort aller Workitems eines Jahres; canceled zählt nicht.'],['Abteilung',FILT.dept==='map'?'aus der Zuordnung Person → Abteilung unter Einstellungen.':'aus Spalte '+CFG.map.wi[FILT.dept]+' der Workitem-Datei.'],['Anzeige','Die 5 größten einzeln, der Rest als „Sonstige“.'],['Jahr nach',wiDTxt()+'.'],['Filter','Assignee.']],
+ wiDept:()=>[['Rechnung','Anteil der Abteilung am Estimated Effort aller Workitems eines Jahres; canceled zählt nicht.'],['Abteilung',FILT.dept==='klammer'?'aus der Klammer im Assignee (Spalte '+CFG.map.wi.assignee+'), z. B. „Max Muster (EDS-SW3)“ → EDS-SW3. Ohne Klammer: „(ohne Abteilung)“.':FILT.dept==='map'?'aus der Zuordnung Person → Abteilung unter Einstellungen, sonst aus der Klammer im Assignee.':'aus Spalte '+CFG.map.wi[FILT.dept]+' der Workitem-Datei.'],['Anzeige','Die 5 größten einzeln, der Rest als „Sonstige“.'],['Jahr nach',wiDTxt()+'.'],['Filter','Assignee.']],
  wiAsg:()=>[['Rechnung','Estimated Effort je Assignee ÷ Estimated Effort aller gefilterten Workitems; canceled zählt nicht.'],['Jahr nach',wiDTxt()+'.'],['Filter','Jahr, Assignee.']],
  onTime:()=>[['Auswahl','Workitems mit Status „'+CFG.closed+'“, Abschlussdatum und geplantem Datum.'],['Pünktlich','Abschlusstag ≤ geplanter Tag (Spalte '+CFG.map.wi.actual+' gegen '+CFG.map.wi.planned+').'],['Ø Verzug','Mittel der Tage über Plan, nur über die verspäteten.'],['Filter','Jahr (nach Abschluss), Assignee.']],
  leadPrefix:()=>[['Rechnung',leadTxt()],['Präfix',prefixTxt()+'.'],['Werte','Ø Durchschnitt, Median (Mitte), Quartile 25–75 % (Balken), 85-%-Wert. min. n blendet seltene Präfixe aus.'],['Filter','Jahr (nach Abschluss), Assignee.']],
@@ -1125,16 +1134,62 @@ function infoHtml(id){const f=INFO[id];if(!f)return '';try{return f().map(([k,v]
 
 /* ─── Kennzahlen ───────────────────────────────────────────── */
 function renderKpis(){
-  const dc=defCats();let n=0,p=0,b=0,db=0,dp=0;
-  for(const i of D.issues){if(!asgOk(i.assignee)||!yearOk(issDate(i)))continue;n++;p+=i.est;if(dc.has(i.cat))dp+=i.est}
-  for(const x of D.bks){if(!asgOk(bookPerson(x))||(!x.iss&&!x.date)||!yearOk(bookDate(x)))continue;b+=x.h;if(x.iss&&dc.has(x.iss.cat))db+=x.h}
-  let wh=0,wn=0,on=0,oh=0;for(const w of D.wis){if(!asgOk(w.assignee))continue;if(w.sc!=='canceled'&&yearOk(wiDate(w))){wh+=w.est;wn++}if(w.sc==='open'){on++;oh+=w.est}}
-  const lt=stats(leadItems().map(w=>w.lt));
-  $('#kpis').innerHTML=[
-    ['Issues',nf0.format(n),yearTxt()],['Geplant',fh(p),'Estimated Effort'],FILT.noBk?['Defekte geplant',fh(dp),'Anteil '+fp(p?dp/p:null)]:['Abgerechnet',fh(b),'Ist/Plan '+fp(p?b/p:null)],
-    FILT.noBk?['Ø je Issue',fh(n?p/n:0),'geplant']:['Davon Defekte',fh(db),'Anteil '+fp(b?db/b:null)],['Workitems',fh(wh),nf0.format(wn)+' Stück · '+nf0.format(on)+' offen ('+fh(oh)+')'],['Durchlaufzeit',lt?fd(lt.med):'–',lt?'Median · Ø '+fd(lt.avg)+' · n '+lt.n:'keine Daten']
-  ].map(([t,v,s])=>`<div class="kpi"><dt>${t}</dt><dd>${v}</dd><small>${esc(s)}</small></div>`).join('');
+  const K=kpiSatz[AKT]||kpiSatz.issues;let z=[];
+  try{z=K()}catch(e){console.error(e)}
+  $('#kpis').innerHTML=z.map(([t,v,s,warn])=>`<div class="kpi"><dt>${t}</dt><dd${warn?' class="warn"':''}>${v}</dd><small>${esc(s||'')}</small></div>`).join('');
+  $('#kpis').dataset.g=AKT;
 }
+const kpiSatz={
+  issues(){
+    const dc=defCats();let n=0,p=0,b=0,db=0,dp=0,dn=0,ueb=0;
+    for(const i of D.issues){if(!asgOk(i.assignee)||!yearOk(issDate(i)))continue;n++;p+=i.est;if(dc.has(i.cat)){dp+=i.est;dn++}if(i.booked>i.est&&i.est>0)ueb++}
+    for(const x of D.bks){if(!asgOk(bookPerson(x))||(!x.iss&&!x.date)||!yearOk(bookDate(x)))continue;b+=x.h;if(x.iss&&dc.has(x.iss.cat))db+=x.h}
+    const lat=[];for(const i of D.issues){if(!dc.has(i.cat)||!asgOk(i.assignee)||i.inj==null||i.submit==null||!yearOk(i.submit))continue;const d=(i.submit-i.inj)/DAY;if(d>=0)lat.push(d)}
+    const L=stats(lat);
+    return [['Issues',nf0.format(n),yearTxt()+' · davon '+nf0.format(dn)+' Defekte'],['Geplant',fh(p),'Estimated Effort'],
+      FILT.noBk?['Ø je Issue',fh(n?p/n:0),'geplant']:['Abgerechnet',fh(b),'Ist/Plan '+fp(p?b/p:null),p&&b>p],
+      FILT.noBk?['Defekte geplant',fh(dp),'Anteil '+fp(p?dp/p:null)]:['Defekte abgerechnet',fh(db),'Anteil '+fp(b?db/b:null)+' · geplant '+fh(dp)],
+      FILT.noBk?['Defekt-Anteil',fp(n?dn/n:null),'nach Anzahl']:['Überschritten',nf0.format(ueb),'Issues mit Ist über Plan · '+fp(n?ueb/n:null),ueb>0],
+      ['Entdeckungszeit',L?fd(L.med):'–',L?'Median Defekte · Ø '+fd(L.avg):'keine Defekte mit Injektionsdatum']];
+  },
+  wi(){
+    let n=0,h=0,nc=0,hc=0,no=0,ho=0,nx=0,ok=0,mit=0;const dep=new Set();
+    for(const w of D.wis){if(!asgOk(w.assignee)||!yearOk(wiDate(w)))continue;n++;h+=w.est;
+      if(w.sc==='closed'){nc++;hc+=w.est;if(w.actual!=null&&w.planned!=null){mit++;if(Math.floor(w.actual/DAY)<=Math.floor(w.planned/DAY))ok++}}
+      else if(w.sc==='canceled')nx++;else{no++;ho+=w.est}
+      if(w.sc!=='canceled')dep.add(deptOf(w))}
+    const top=(()=>{const M=new Map();for(const w of D.wis){if(!asgOk(w.assignee)||w.sc==='canceled'||!yearOk(wiDate(w)))continue;const d=deptOf(w);M.set(d,(M.get(d)||0)+w.est)}let b=null;for(const e of M)if(!b||e[1]>b[1])b=e;const t=[...M.values()].reduce((a,c)=>a+c,0);return b?[b[0],t?b[1]/t:0]:null})();
+    return [['Workitems',nf0.format(n),yearTxt()+' · '+nf0.format(nx)+' canceled'],['Aufwand',fh(h),'Estimated Effort, alle Stati'],
+      ['Abgeschlossen',nf0.format(nc),fh(hc)+' · '+fp(n?nc/n:null)+' der Workitems'],['Offen',nf0.format(no),fh(ho)],
+      ['Termintreue',fp(mit?ok/mit:null),mit?nf0.format(ok)+' von '+nf0.format(mit)+' pünktlich':'keine Plan-/Abschlussdaten',mit&&ok/mit<.7],
+      ['Abteilungen',nf0.format(dep.size),top?'größte: '+top[0]+' ('+fp(top[1])+')':'–']];
+  },
+  lead(){
+    const it=leadItems(),L=stats(it.map(w=>w.lt));
+    const M=new Map();it.forEach(w=>{if(!M.has(w.prefix))M.set(w.prefix,[]);M.get(w.prefix).push(w.lt)});
+    const ps=[...M.entries()].map(([p,a])=>[p,quant([...a].sort((x,y)=>x-y),.5),a.length]).filter(x=>x[2]>=Math.max(1,+LOCAL.leadMin));
+    ps.sort((a,b)=>a[1]-b[1]);const f=ps[0],l=ps.at(-1);
+    return [['Median',L?fd(L.med):'–',L?'Hälfte schneller als das':yearTxt('Abschluss')],['Durchschnitt',L?fd(L.avg):'–',L?'Spanne '+nf1.format(L.min)+' – '+fd(L.max):''],
+      ['85 %-Wert',L?fd(L.p85):'–','85 % sind schneller'],['Abgeschlossen',nf0.format(L?L.n:0),yearTxt('Abschluss')+' · Basis '+(LOCAL.leadBasis==='submit'?'Submit':'Start')],
+      ['Schnellstes Präfix',f?esc(f[0]):'–',f?'Median '+fd(f[1])+' · n '+f[2]:''],['Langsamstes Präfix',l?esc(l[0]):'–',l?'Median '+fd(l[1])+' · n '+l[2]:'',!!l&&!!L&&l[1]>L.med*1.5]];
+  },
+  fc(){
+    const hz=+LOCAL.horizon,M=new Map(),today=Date.now();let n=0,h=0,od=0,noe=0;
+    for(const w of D.wis){if(w.sc!=='open'||!asgOk(w.assignee))continue;n++;h+=w.est;if(!w.est)noe++;if(w.planned!=null&&w.planned<today)od++;M.set(w.assignee,(M.get(w.assignee)||0)+w.est)}
+    let cap=0,ueb=0;for(const [a,l] of M){const c=whOf(a)*hz;cap+=c;if(l>c)ueb++}
+    const d=cap-h;
+    return [['Offene Workitems',nf0.format(n),'nicht „'+CFG.closed+'“, nicht „'+CFG.canceled+'“'],['Offener Aufwand',fh(h),noe?nf0.format(noe)+' ohne Schätzung':'alle geschätzt',noe>0],
+      ['Kapazität',fh(cap),(hz===1?'1 Woche':hz+' Wochen')+' · '+nf0.format(M.size)+' Personen'],['Differenz',(d>=0?'+':'−')+fh(Math.abs(d)),d<0?'Überlast':'frei',d<0],
+      ['Überlastet',nf0.format(ueb)+' von '+nf0.format(M.size),'Personen über Kapazität',ueb>0],['Überfällig',nf0.format(od),'geplantes Datum vor heute',od>0]];
+  },
+  qa(){
+    const n=D.bks.length,zu=D.bks.filter(b=>b.iss).length,oh=n-zu,ohH=D.bks.filter(b=>!b.iss).reduce((a,b)=>a+b.h,0);
+    const nob=D.issues.filter(i=>!i.nb).length,noe=D.issues.filter(i=>!i.est).length,wc=D.wis.filter(w=>w.sc==='closed'&&w.actual==null).length;
+    return [['Zugeordnet',fp(n?zu/n:null),nf0.format(zu)+' von '+nf0.format(n)+' Buchungen',n&&zu/n<.95],['Ohne Issue',nf0.format(oh),fh(ohH)+' nicht zugeordnet',oh>0],
+      ['Doppelzeilen',nf0.format(D.dup.bk.length),CFG.bkDup==='summe'?'werden summiert':'ignoriert (erste Zeile zählt)'],['Issues ohne Buchung',nf0.format(nob),'von '+nf0.format(D.issues.length)],
+      ['Ohne Schätzung',nf0.format(noe),'Issues ohne Estimated Effort',noe>0],['Closed ohne Datum',nf0.format(wc),'Workitems ohne Actual Date',wc>0]];
+  }
+};
 
 /* ─── Aufbau der Seite ─────────────────────────────────────── */
 function renderAll(){
@@ -1154,7 +1209,7 @@ function renderAll(){
       <div class="c-body"><div class="c-top"></div><div class="chart"></div><div class="c-tbl"></div></div></section>`;}
   }
   html+='</div></section>';host.innerHTML=html;
-  syncGroups();
+  syncGroups();renderKpis();
   for(const r of REPORTS)if(sichtbar(r))renderCard(r);
   renderAns();
 }
@@ -1194,6 +1249,7 @@ function syncGroups(){
 function zuKategorie(g){
   if(g===AKT&&!$(`.kat[data-g="${g}"]`)?.hidden)return;
   AKT=g;$$('.kat').forEach(k=>k.hidden=k.dataset.g!==g);
+  renderKpis();
   const sek=$(`.kat[data-g="${g}"]`);if(sek&&!reduce){sek.classList.remove('rein');void sek.offsetWidth;sek.classList.add('rein')}
   TIPS.clear();
   for(const r of REPORTS){if(!sichtbar(r))continue;const el=$(`[data-r="${r.id}"]`);if(el&&(el.dataset.alt||(!$('.chart',el).innerHTML&&!$('.c-tbl',el).innerHTML))){renderCard(r);delete el.dataset.alt}}
@@ -1245,7 +1301,7 @@ function openSettings(){
   const block=k=>`<h4>${FILE_NAMES[k]} – Spalten</h4><div class="map">${FIELDS[k].map(([f,l])=>`<label>${esc(l)}<select data-map="${k}.${f}">${opt(k,f,CFG.map[k][f],k==='bk'&&(f==='date'||f==='person'))}</select></label>`).join('')}
     <label>Aufwand-Einheit<select data-unit="${k}">${[['h','Stunden'],['d','Personentage'],['min','Minuten'],['xt','Excel-Dauer [h]:mm']].map(([v,l])=>`<option value="${v}" ${CFG.unit[k]===v?'selected':''}>${l}</option>`).join('')}</select></label>
     ${RAW[k]?.sheetNames?.length>1?`<label>Tabellenblatt<select data-sheet="${k}"><option value="">automatisch (größtes)</option>${RAW[k].sheetNames.map(n=>`<option ${CFG.sheet?.[k]===n?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`:''}</div>`;
-  const ppl=(D?.people||Object.keys(CFG.people)).map(p=>`<tr><td>${esc(p)}</td><td><input data-pd="${esc(p)}" value="${esc(CFG.people[p]?.dept||'')}" placeholder="z. B. SW-Entwicklung"></td><td><input class="num" data-pw="${esc(p)}" inputmode="decimal" value="${esc(String(CFG.people[p]?.wh||''))}" placeholder="${esc(String(CFG.weekly))}"></td></tr>`).join('');
+  const ppl=(D?.people||Object.keys(CFG.people)).map(p=>`<tr><td>${esc(p)}</td><td><input data-pd="${esc(p)}" value="${esc(CFG.people[p]?.dept||'')}" placeholder="${esc(klammer(p)||'z. B. SW-Entwicklung')}"></td><td><input class="num" data-pw="${esc(p)}" inputmode="decimal" value="${esc(String(CFG.people[p]?.wh||''))}" placeholder="${esc(String(CFG.weekly))}"></td></tr>`).join('');
   $('#setBody').innerHTML=`
     <h4>Allgemein</h4><div class="map">
       <label>Erste Zeile ist Überschrift<select id="sHeader"><option value="1" ${CFG.header?'selected':''}>ja</option><option value="0" ${CFG.header?'':'selected'}>nein</option></select></label>
@@ -1285,7 +1341,7 @@ function saveSettings(){
 /* ─── Beispieldaten ────────────────────────────────────────── */
 function demo(){
   let seed=7;const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;const pick=a=>a[Math.floor(rnd()*a.length)];
-  const ppl=['Anna Becker','Jonas Weber','Lena Hoffmann','Murat Yilmaz','Sophie Klein','Tim Schäfer','Paul Wagner'];
+  const ppl=['Anna Becker (EDS-SW)','Jonas Weber (EDS-SW)','Lena Hoffmann (EDS-SYS)','Murat Yilmaz (EDS-TST)','Sophie Klein (EDS-SYS)','Tim Schäfer (EDS-TST)','Paul Wagner (EDS-SW)'];
   const cats=['Defect','Defect','Change Request','Task','Improvement'];
   const pre=['SWE','SYS','TST','REV','DOC','INT'];
   const words=['Diagnose DTC','SCR Dosierung','DPF Regeneration','NOx-Sensor','Lambda Plausi','Bootloader','CAN Timeout','OBD Readiness','Heizer','Temperaturmodell'];
@@ -1298,7 +1354,7 @@ function demo(){
     const t=pick(words)+' '+pick(['anpassen','fehlerhaft','erweitern','prüfen','umstellen']);
     iss.push([id,t,sub<now-60*DAY?pick(['Closed','Closed','Verified','Implemented']):pick(['Open','In Work','Analysis']),xl(sub),a,est,cat,pick(ppl),cat==='Defect'?xl(sub-Math.floor(rnd()*240)*DAY):null]);
     const nb=1+Math.floor(rnd()*4),f=0.6+rnd()*0.9;
-    for(let k=0;k<nb;k++){const r=Array(22).fill(null);r[15]=id;r[20]=Math.round(est*f/nb*10)/10;bk.push(r)}
+    for(let k=0;k<nb;k++){const r=Array(22).fill(null);r[15]=id;r[20]=Math.round(est*f*10)/10;bk.push(r)}  // wie im echten Export: ID wiederholt, erste Zeile zählt
     const nw=1+Math.floor(rnd()*3);
     for(let k=0;k<nw;k++){
       const p=pick(pre),st=sub+Math.floor(rnd()*20)*DAY,dur={SWE:25,SYS:18,TST:12,REV:5,DOC:8,INT:15}[p]*(0.3+rnd()*1.6),act=st+dur*DAY,pl=st+({SWE:25,SYS:18,TST:12,REV:5,DOC:8,INT:15}[p])*DAY;
@@ -1308,8 +1364,8 @@ function demo(){
     }
   }
   RAW={iss:{name:'Beispiel_Issues.xlsx',rows:iss},wi:{name:'Beispiel_Workitems.xlsx',rows:wi},bk:{name:'Beispiel_Buchungen.xlsx',rows:bk}};
-  const dep={'Anna Becker':'SW-Entwicklung','Jonas Weber':'SW-Entwicklung','Lena Hoffmann':'Systems','Murat Yilmaz':'Test','Sophie Klein':'Systems','Tim Schäfer':'Test','Paul Wagner':'SW-Entwicklung'};
-  for(const p in dep)CFG.people[p]=Object.assign({wh:p==='Sophie Klein'?'30':p==='Tim Schäfer'?'20':''},CFG.people[p]||{},{dept:CFG.people[p]?.dept||dep[p]});
+  CFG.people['Sophie Klein (EDS-SYS)']=Object.assign(CFG.people['Sophie Klein (EDS-SYS)']||{},{wh:CFG.people['Sophie Klein (EDS-SYS)']?.wh||'30'});
+  CFG.people['Tim Schäfer (EDS-TST)']=Object.assign(CFG.people['Tim Schäfer (EDS-TST)']||{},{wh:CFG.people['Tim Schäfer (EDS-TST)']?.wh||'20'});
   build();renderAll();toast('Beispieldaten geladen – eigene Dateien ersetzen sie');
 }
 
