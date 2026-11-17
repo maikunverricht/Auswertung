@@ -172,6 +172,9 @@ input[type=checkbox]{accent-color:var(--amber);width:15px;height:15px}
 .legend i.ln{height:2px;border-radius:2px;width:16px}
 .legend i.dia{width:9px;height:9px;transform:rotate(45deg);border-radius:1px}
 .legend i.rd{border-radius:50%}
+.legend .lg-bk{cursor:pointer;border-radius:6px;padding:0 4px;margin:0 -4px}
+.legend .lg-bk:hover{background:var(--film)}
+.legend .lg-bk.off{opacity:.45;text-decoration:line-through}
 .chart{width:100%;min-height:40px;position:relative}
 .chart svg{display:block;width:100%;overflow:visible}
 .chart text{font-family:var(--mono);font-size:10.5px;fill:var(--text-3)}
@@ -323,6 +326,7 @@ footer.pf{position:relative;z-index:1;max-width:var(--max);margin:0 auto;padding
     <span class="fl">Issue-Datum <select class="sel" id="fIssDate"><option value="submit">Submit</option><option value="inj">Defekt-Injektion</option></select></span>
     <span class="fl">Workitem-Datum <select class="sel" id="fWiDate"><option value="actual">Abschluss (actual)</option><option value="submit">Submit</option><option value="start">Start</option><option value="planned">Geplant</option></select></span>
     <span class="fl">Abteilung aus <select class="sel" id="fDept"><option value="map">Zuordnung Person</option><option value="sub">Subcategory</option><option value="projIss">Projekt-ID Issue</option><option value="projRel">Projekt-ID Release</option></select></span>
+    <span class="fl">Anzeige <button class="pill sm on" id="fBk" type="button" aria-pressed="true" title="Abgerechneten Aufwand ein- oder ausblenden">Abgerechnet an</button></span>
     <span class="fl ms">Defekt-Kategorie <button class="sel" id="fCatBtn" type="button" style="min-width:120px;text-align:left">automatisch</button>
       <div class="ms-panel" id="fCatPanel" hidden></div></span>
     
@@ -398,7 +402,7 @@ const FILE_NAMES={iss:'Issues',wi:'Workitems',bk:'Gebuchter Aufwand'};
 
 let CFG=merge(structuredClone(DEF),lsGet(LS.cfg,{}));
 let RAW=lsGet(LS.raw,{});
-let FILT=Object.assign({year:'all',asg:null,issDate:'submit',wiDate:'actual',dept:'map',cats:null},lsGet(LS.filt,{}));
+let FILT=Object.assign({noBk:false,year:'all',asg:null,issDate:'submit',wiDate:'actual',dept:'map',cats:null},lsGet(LS.filt,{}));
 let HID=new Set(lsGet(LS.hid,[]));
 let OPEN=new Set(lsGet(LS.open,[]));
 let D=null;           // aufbereitete Daten
@@ -546,9 +550,12 @@ function scaleY(max,n=4){if(!(max>0))return{top:1,step:.25};const step=niceStep(
 const W=el=>Math.max(280,el.clientWidth||el.parentElement?.clientWidth||600);
 function barTop(x,y,w,h,r){r=Math.min(r,w/2,h);if(h<=0)return'';return `M${x},${y+h}V${y+r}Q${x},${y} ${x+r},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h}Z`}
 function barRight(x,y,w,h,r){r=Math.min(r,h/2,w);if(w<=0)return'';return `M${x},${y}H${x+w-r}Q${x+w},${y} ${x+w},${y+r}V${y+h-r}Q${x+w},${y+h} ${x+w-r},${y+h}H${x}Z`}
-function legend(items){return `<div class="legend">${items.map(s=>`<span><i class="${s.shape||''}" style="background:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>`}
+const isBk=n=>/abgerechnet/i.test(n||'');
+const bkAus=n=>FILT.noBk&&isBk(n);
+function legend(items){return `<div class="legend">${items.map(s=>{const bk=isBk(s.name);return `<span${bk?` class="lg-bk${FILT.noBk?' off':''}" role="button" tabindex="0" title="Abgerechnet ${FILT.noBk?'einblenden':'ausblenden'}"`:''}><i class="${s.shape||''}" style="background:${s.color}"></i>${esc(s.name)}</span>`}).join('')}</div>`}
 
 function vbars(el,labels,series,o={}){
+  series=series.filter(s=>!bkAus(s.name));if(!series.length){el.innerHTML='<div class="empty">Alle Reihen ausgeblendet</div>';return}
   const w=W(el),h=o.h||240,m={l:46,r:8,t:o.valLabels?18:10,b:26};
   const pw=w-m.l-m.r,ph=h-m.t-m.b,n=labels.length;
   if(!n){el.innerHTML='<div class="empty">Keine Daten im gewählten Zeitraum</div>';return}
@@ -572,6 +579,7 @@ function vbars(el,labels,series,o={}){
   el.innerHTML=s;
 }
 function hbars(el,rows,o={}){
+  rows=rows.map(r=>Object.assign({},r,{vals:r.vals.filter(v=>!bkAus(v.name))})).filter(r=>r.vals.length);
   if(!rows.length){el.innerHTML='<div class="empty">Keine Daten</div>';return}
   const w=W(el),ns=rows[0].vals.length,bh=ns>1?9:14,gap=2,rh=Math.max(24,ns*bh+(ns-1)*gap+10);
   const lw=Math.min(o.lw||190,w*.34),vw=o.vw||78,pw=w-lw-vw-8,h=rows.length*rh+6;
@@ -680,7 +688,7 @@ function table(id,cols,rows,o={}){
   return `<div class="tw" data-tbl="${id}">${tableInner(id)}</div>`;
 }
 function tableInner(id){
-  const t=TABLES[id],{cols,o}=t;let rows=[...t.rows];
+  const t=TABLES[id],{o}=t,cols=t.cols.filter(c=>!(c.bk&&FILT.noBk));let rows=[...t.rows];
   if(t.sort){const c=cols.find(c=>c.k===t.sort.k);if(c){const f=c.sv||(r=>r[c.k]);rows.sort((a,b)=>{const x=f(a),y=f(b);const r=(typeof x==='number'&&typeof y==='number')?x-y:String(x??'').localeCompare(String(y??''),'de',{numeric:true});return t.sort.d*r})}}
   const lim=o.limit||2000;
   let s='<table><thead><tr>'+cols.map(c=>`<th class="${c.n?'n':''}" data-k="${c.k}">${esc(c.l)}${t.sort?.k===c.k?(t.sort.d>0?' ▲':' ▼'):''}</th>`).join('')+'</tr></thead><tbody>';
@@ -691,7 +699,7 @@ function tableInner(id){
   return s;
 }
 async function csv(id){
-  const t=TABLES[id];if(!t)return;
+  const t0=TABLES[id];if(!t0)return;const t=Object.assign({},t0,{cols:t0.cols.filter(c=>!(c.bk&&FILT.noBk))});
   const cell=v=>{if(typeof v==='number')return nf1.format(v).replace(/\./g,'');return String(v??'').replace(/[\t\r\n]+/g,' ')};
   const rows=[t.cols.map(c=>c.l).join('\t'),...t.rows.map(r=>t.cols.map(c=>cell(c.csv?c.csv(r):(typeof r[c.k]==='number'?r[c.k]:(c.f?c.f(r[c.k],r):r[c.k])))).join('\t'))];
   try{await navigator.clipboard.writeText(rows.join('\n'));toast('Tabelle kopiert – in Excel einfügen')}
@@ -724,10 +732,10 @@ const wiDateTxt=()=>$('#fWiDate').selectedOptions[0].text;
 function monthReport(def){return (c)=>{
   const {axis,plan,book,cnt}=issueMonthly(def);
   const el=c.chart;c.top.innerHTML=legend([{name:H.l,color:H.c},{name:B.l,color:B.c}]);
-  vbars(el,axis,[{name:H.l,color:H.c,vals:plan},{name:B.l,color:B.c,vals:book}],{xl:ymLabel,tipTitle:i=>ymLong(axis[i]),extraTip:i=>tipRow('','Issues',nf0.format(cnt[i]))+tipRow('','Ist/Plan',plan[i]?fp(book[i]/plan[i]):'–')});
+  vbars(el,axis,[{name:H.l,color:H.c,vals:plan},{name:B.l,color:B.c,vals:book}],{xl:ymLabel,tipTitle:i=>ymLong(axis[i]),extraTip:i=>tipRow('','Issues',nf0.format(cnt[i]))+(FILT.noBk?'':tipRow('','Ist/Plan',plan[i]?fp(book[i]/plan[i]):'–'))});
   const rows=axis.map((k,i)=>({m:ymLong(k),k,n:cnt[i],p:plan[i],b:book[i],d:book[i]-plan[i],q:plan[i]?book[i]/plan[i]:null}));
   const sp=plan.reduce((a,b)=>a+b,0),sb=book.reduce((a,b)=>a+b,0);
-  c.table(table(c.id,[{k:'m',l:'Monat',sv:r=>r.k},{k:'n',l:'Issues',n:1,f:v=>nf0.format(v)},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abgerechnet h',n:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':''},{k:'q',l:'Ist/Plan',n:1,f:v=>fp(v)}],
+  c.table(table(c.id,[{k:'m',l:'Monat',sv:r=>r.k},{k:'n',l:'Issues',n:1,f:v=>nf0.format(v)},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abgerechnet h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':'',bk:1},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v)}],
     rows,{sum:{m:'Summe',n:cnt.reduce((a,b)=>a+b,0),p:sp,b:sb,d:sb-sp,q:sp?sb/sp:null}}));
 }}
 function rIssYear(c){
@@ -737,7 +745,7 @@ function rIssYear(c){
   const rows=[...Y.values()].sort((a,b)=>a.y-b.y);
   const ser=[{name:'Geplant',color:'var(--c1)',vals:rows.map(r=>r.p)},{name:'Abgerechnet',color:'var(--c2)',vals:rows.map(r=>r.b)},{name:'Defekt geplant',color:'var(--c3)',vals:rows.map(r=>r.dp)},{name:'Defekt abgerechnet',color:'var(--c4)',vals:rows.map(r=>r.db)}];
   c.top.innerHTML=legend(ser);vbars(c.chart,rows.map(r=>String(r.y)),ser,{h:230});
-  c.table(table(c.id,[{k:'y',l:'Jahr'},{k:'n',l:'Issues',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,f:v=>nf1.format(v)},{k:'dn',l:'Defekte',n:1},{k:'dp',l:'Def. geplant h',n:1,f:v=>nf1.format(v)},{k:'db',l:'Def. abger. h',n:1,f:v=>nf1.format(v)},{k:'ds',l:'Def.-Anteil',n:1,f:(v,r)=>fp(r.b?r.db/r.b:null),sv:r=>r.b?r.db/r.b:0}],rows));
+  c.table(table(c.id,[{k:'y',l:'Jahr'},{k:'n',l:'Issues',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'dn',l:'Defekte',n:1},{k:'dp',l:'Def. geplant h',n:1,f:v=>nf1.format(v)},{k:'db',l:'Def. abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'ds',l:'Def.-Anteil',n:1,bk:1,f:(v,r)=>fp(r.b?r.db/r.b:null),sv:r=>r.b?r.db/r.b:0}],rows));
 }
 function rIssAsg(c){
   const M=new Map();const g=n=>{if(!M.has(n))M.set(n,{a:n,p:0,b:0,n:0});return M.get(n)};
@@ -745,8 +753,8 @@ function rIssAsg(c){
   for(const b of D.bks){const p=bookPerson(b);if(!asgOk(p)||(!b.iss&&!b.date)||!yearOk(bookDate(b)))continue;g(p).b+=b.h}
   const rows=[...M.values()].map(r=>Object.assign(r,{d:r.b-r.p,q:r.p?r.b/r.p:null})).sort((a,b)=>b.b-a.b);
   c.top.innerHTML=legend([{name:H.l,color:H.c},{name:B.l,color:B.c}]);
-  hbars(c.chart,rows.slice(0,15).map(r=>({label:r.a,vals:[{v:r.p,color:H.c,name:H.l},{v:r.b,color:B.c,name:B.l}],text:fh(r.b),tip:`<b>${esc(r.a)}</b>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Ist/Plan',fp(r.q))+tipRow('','Issues',nf0.format(r.n))})));
-  c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'n',l:'Issues',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':''},{k:'q',l:'Ist/Plan',n:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{sort:{k:'b',d:-1}}));
+  hbars(c.chart,rows.slice(0,15).map(r=>({label:r.a,vals:[{v:r.p,color:H.c,name:H.l},{v:r.b,color:B.c,name:B.l}],text:FILT.noBk?fh(r.p):fh(r.b),tip:`<b>${esc(r.a)}</b>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Ist/Plan',fp(r.q))+tipRow('','Issues',nf0.format(r.n))})));
+  c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'n',l:'Issues',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':'',bk:1},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{sort:{k:'b',d:-1}}));
 }
 function rOverrun(c){
   const rows=D.issues.filter(i=>asgOk(i.assignee)&&yearOk(issDate(i))&&(i.est>0||i.booked>0)).map(i=>({id:i.id,t:i.title,a:i.assignee,c:i.cat,s:i.state,p:i.est,b:i.booked,d:i.booked-i.est,q:i.est?i.booked/i.est:null})).sort((a,b)=>b.d-a.d);
@@ -754,7 +762,7 @@ function rOverrun(c){
   c.top.innerHTML=legend([{name:'Überschreitung (abgerechnet − geplant)',color:'var(--c4)'}]);
   hbars(c.chart,top.map(r=>({label:r.id+' '+r.t,vals:[{v:r.d,color:'var(--c4)',name:'Überschreitung'}],text:'+'+fh(r.d),tip:`<b>${esc(r.id)}</b><div style="color:var(--text-2);margin-bottom:4px">${esc(r.t)}</div>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Assignee',r.a)})),{lw:220});
   if(!top.length)c.chart.innerHTML='<div class="empty">Keine Überschreitungen</div>';
-  c.table(table(c.id,[{k:'id',l:'ID'},{k:'t',l:'Titel',html:r=>`<div class="trunc" title="${esc(r.t)}">${esc(r.t)}</div>`},{k:'a',l:'Assignee'},{k:'c',l:'Kategorie'},{k:'s',l:'State'},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,f:v=>nf1.format(v)},{k:'d',l:'Δ h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':''},{k:'q',l:'Ist/Plan',n:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{limit:300}));
+  c.table(table(c.id,[{k:'id',l:'ID'},{k:'t',l:'Titel',html:r=>`<div class="trunc" title="${esc(r.t)}">${esc(r.t)}</div>`},{k:'a',l:'Assignee'},{k:'c',l:'Kategorie'},{k:'s',l:'State'},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Δ h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':''},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{limit:300}));
 }
 function rDefLat(c){
   const dc=defCats(),Y=new Map();
@@ -881,14 +889,14 @@ function rQuality(c){
 
 /* ─── Kennzahlen ───────────────────────────────────────────── */
 function renderKpis(){
-  const dc=defCats();let n=0,p=0,b=0,db=0;
-  for(const i of D.issues){if(!asgOk(i.assignee)||!yearOk(issDate(i)))continue;n++;p+=i.est}
+  const dc=defCats();let n=0,p=0,b=0,db=0,dp=0;
+  for(const i of D.issues){if(!asgOk(i.assignee)||!yearOk(issDate(i)))continue;n++;p+=i.est;if(dc.has(i.cat))dp+=i.est}
   for(const x of D.bks){if(!asgOk(bookPerson(x))||(!x.iss&&!x.date)||!yearOk(bookDate(x)))continue;b+=x.h;if(x.iss&&dc.has(x.iss.cat))db+=x.h}
   let wh=0,wn=0,on=0,oh=0;for(const w of D.wis){if(!asgOk(w.assignee))continue;if(w.sc!=='canceled'&&yearOk(wiDate(w))){wh+=w.est;wn++}if(w.sc==='open'){on++;oh+=w.est}}
   const lt=stats(leadItems().map(w=>w.lt));
   $('#kpis').innerHTML=[
-    ['Issues',nf0.format(n),yearTxt()],['Geplant',fh(p),'Estimated Effort'],['Abgerechnet',fh(b),'Ist/Plan '+fp(p?b/p:null)],
-    ['Davon Defekte',fh(db),'Anteil '+fp(b?db/b:null)],['Workitems',fh(wh),nf0.format(wn)+' Stück · '+nf0.format(on)+' offen ('+fh(oh)+')'],['Durchlaufzeit',lt?fd(lt.med):'–',lt?'Median · Ø '+fd(lt.avg)+' · n '+lt.n:'keine Daten']
+    ['Issues',nf0.format(n),yearTxt()],['Geplant',fh(p),'Estimated Effort'],FILT.noBk?['Defekte geplant',fh(dp),'Anteil '+fp(p?dp/p:null)]:['Abgerechnet',fh(b),'Ist/Plan '+fp(p?b/p:null)],
+    FILT.noBk?['Ø je Issue',fh(n?p/n:0),'geplant']:['Davon Defekte',fh(db),'Anteil '+fp(b?db/b:null)],['Workitems',fh(wh),nf0.format(wn)+' Stück · '+nf0.format(on)+' offen ('+fh(oh)+')'],['Durchlaufzeit',lt?fd(lt.med):'–',lt?'Median · Ø '+fd(lt.avg)+' · n '+lt.n:'keine Daten']
   ].map(([t,v,s])=>`<div class="kpi"><dt>${t}</dt><dd>${v}</dd><small>${esc(s)}</small></div>`).join('');
 }
 
@@ -934,6 +942,7 @@ function renderStats(){
 function renderFilters(){
   const fy=$('#fYear');fy.innerHTML='<option value="all">Alle</option>'+D.years.map(y=>`<option>${y}</option>`).join('');
   if(FILT.year!=='all'&&!D.years.includes(+FILT.year))FILT.year='all';fy.value=String(FILT.year);
+  const fb=$('#fBk');fb.classList.toggle('on',!FILT.noBk);fb.setAttribute('aria-pressed',String(!FILT.noBk));fb.textContent=FILT.noBk?'Abgerechnet aus':'Abgerechnet an';
   $('#fIssDate').value=FILT.issDate;$('#fWiDate').value=FILT.wiDate;$('#fDept').value=FILT.dept;
   if(FILT.asg)FILT.asg=FILT.asg.filter(a=>D.people.includes(a));
   $('#fAsgBtn').textContent=!FILT.asg?'Alle ('+D.people.length+')':!FILT.asg.length?'keine':FILT.asg.length===1?FILT.asg[0]:FILT.asg.length+' gewählt';
@@ -959,6 +968,7 @@ function setHidden(id,h){
 }
 function saveFilt(){lsSet(LS.filt,FILT)}
 function filtChanged(){saveFilt();renderFilters();rerender()}
+function bkUmschalten(){FILT.noBk=!FILT.noBk;filtChanged();toast(FILT.noBk?'Abgerechnet ausgeblendet':'Abgerechnet eingeblendet')}
 
 /* ─── Einstellungen ────────────────────────────────────────── */
 const LETTERS=(()=>{const a=[];for(let i=0;i<52;i++)a.push(i<26?String.fromCharCode(65+i):'A'+String.fromCharCode(39+i));return a})();
@@ -1066,6 +1076,7 @@ function bind(){
   $('#setClear').onclick=()=>{RAW={};try{localStorage.removeItem(LS.raw)}catch(e){}$('#dlgSet').close();build();renderAll();toast('Daten gelöscht')};
   $$('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
   $('#btnDemo').onclick=demo;
+  $('#fBk').onclick=bkUmschalten;
   $('#fYear').onchange=e=>{FILT.year=e.target.value;filtChanged()};
   $('#fIssDate').onchange=e=>{FILT.issDate=e.target.value;filtChanged()};
   $('#fWiDate').onchange=e=>{FILT.wiDate=e.target.value;filtChanged()};
@@ -1077,6 +1088,7 @@ function bind(){
     if(!e.target.closest('.ms'))$$('.ms-panel').forEach(x=>x.hidden=true);
     if(!e.target.closest('.ans-menue')){$('#ansPanel').hidden=true;$('#ansBtn').setAttribute('aria-expanded','false')}
     const h=e.target.closest('[data-hide]');if(h){setHidden(h.dataset.hide,true);toast('Ausgeblendet – über „Ansichten“ wieder einblenden')}
+    if(e.target.closest('.lg-bk'))bkUmschalten();
     const c=e.target.closest('[data-csv]');if(c)csv(c.dataset.csv);
     const th=e.target.closest('[data-tbl] th');if(th){const id=th.closest('[data-tbl]').dataset.tbl,t=TABLES[id];t.sort={k:th.dataset.k,d:t.sort?.k===th.dataset.k?-t.sort.d:-1};th.closest('[data-tbl]').innerHTML=tableInner(id)}
   });
