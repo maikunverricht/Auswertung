@@ -290,6 +290,7 @@ td .wh{width:70px;height:26px;border-radius:8px;border:1px solid var(--line);bac
 .trunc{max-width:340px;overflow:hidden;text-overflow:ellipsis}
 .inline-ctl{display:flex;gap:6px;align-items:center;font-family:var(--mono);font-size:10.5px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase}
 .inline-ctl .sel{height:28px;font-size:12.5px}
+.sortctl .x{font-family:var(--mono);font-size:13px}
 
 /* Tooltip */
 #tip{position:fixed;z-index:90;pointer-events:none;padding:8px 11px;border-radius:11px;border:1px solid var(--glass-edge);background:var(--surface);
@@ -966,10 +967,34 @@ function leadItems(){
     const from=basis==='submit'?w.submit:(w.start??w.submit);if(from==null)return null;const lt=(w.actual-from)/DAY;return lt>=0?Object.assign({lt},w):null}).filter(Boolean);
 }
 
+/* ─── Sortieren nach (Diagramm und Tabelle gemeinsam) ─── */
+const SORTS={
+  issAsg:{def:'b',opts:[['b','Abgerechnet'],['p','Geplant'],['d','Differenz'],['q','Ist/Plan'],['n','Anzahl Issues'],['a','Name',1]]},
+  issSub:{def:'n',opts:[['n','Anzahl Issues'],['d','Defekte'],['o','Sonstige'],['selbst','selbst zugewiesen'],['p','Geplant'],['s','Name',1],['dept','Abteilung',1]]},
+  overrun:{def:'d',opts:[['d','Überschreitung'],['q','Ist/Plan'],['b','Abgerechnet'],['p','Geplant'],['id','ID',1],['a','Assignee',1]]},
+  wiAsg:{def:'h',opts:[['h','Aufwand'],['n','Anzahl'],['c','closed'],['a','Name',1],['dept','Abteilung',1]]},
+  onTime:{def:'n',opts:[['n','Anzahl closed'],['q','Quote pünktlich'],['late','verspätet'],['dl','Ø Verzug'],['a','Name',1]]},
+  leadPrefix:{def:'n',opts:[['n','Anzahl'],['med','Median'],['avg','Durchschnitt'],['p85','85-%-Wert'],['max','Maximum'],['label','Präfix',1]]},
+  forecast:{def:'d',dd:1,opts:[['d','Differenz'],['h','Offener Aufwand'],['u','Auslastung'],['wk','Reichweite'],['n','Offene WI'],['od','überfällig'],['a','Name',1],['dept','Abteilung',1]]}
+};
+const SORTST=lsGet('wb-ausw-sort',{}),PENDSORT={};
+const istText=(id,k)=>!!SORTS[id]?.opts.find(o=>o[0]===k)?.[2];
+function sortCmp(k,d){return (a,b)=>{const x=a[k],y=b[k];const xn=x==null||(typeof x==='number'&&!isFinite(x)),yn=y==null||(typeof y==='number'&&!isFinite(y));
+  if(xn||yn)return xn===yn?0:xn?1:-1;
+  return d*((typeof x==='number'&&typeof y==='number')?x-y:String(x).localeCompare(String(y),'de',{numeric:true}))}}
+function sortiere(c,rows){
+  const cfg=SORTS[c.id];if(!cfg)return rows;
+  let st=SORTST[c.id];if(!st||!cfg.opts.some(o=>o[0]===st.k))st={k:cfg.def,d:cfg.dd||(istText(c.id,cfg.def)?1:-1)};
+  rows.sort(sortCmp(st.k,st.d));PENDSORT[c.id]=st;
+  c._sort=`<span class="inline-ctl sortctl">Sortieren <select class="sel" data-sort="${c.id}" aria-label="Sortieren nach">${cfg.opts.map(o=>`<option value="${o[0]}" ${o[0]===st.k?'selected':''}>${esc(o[1])}</option>`).join('')}</select><button class="x" type="button" data-sortdir="${c.id}" title="${st.d<0?'absteigend – umkehren':'aufsteigend – umkehren'}" aria-label="Richtung umkehren">${st.d<0?'↓':'↑'}</button></span>`;
+  return rows;
+}
+function sortSetzen(id,k,d){const t=istText(id,k);if(d==null)d=(k==='d'&&id==='forecast')?1:t?1:-1;SORTST[id]={k,d};lsSet('wb-ausw-sort',SORTST);rerender([id])}
+
 /* ─── Tabellen ─────────────────────────────────────────────── */
 const TABLES={};
 function table(id,cols,rows,o={}){
-  TABLES[id]={cols,rows,o,sort:TABLES[id]?.sort||o.sort||null};
+  TABLES[id]={cols,rows,o,sort:PENDSORT[id]||TABLES[id]?.sort||o.sort||null};delete PENDSORT[id];
   return `<div class="tw" data-tbl="${id}">${tableInner(id)}</div>`;
 }
 function tableInner(id){
@@ -1037,7 +1062,7 @@ function rIssAsg(c){
   const M=new Map();const g=n=>{if(!M.has(n))M.set(n,{a:n,p:0,b:0,n:0});return M.get(n)};
   for(const i of D.issues){if(!asgOk(i.assignee)||!yearOk(issDate(i)))continue;const o=g(i.assignee);o.p+=i.est;o.n++}
   for(const b of D.bks){const p=bookPerson(b);if(!asgOk(p)||(!b.iss&&!b.date)||!yearOk(bookDate(b)))continue;g(p).b+=b.h}
-  const rows=[...M.values()].map(r=>Object.assign(r,{d:r.b-r.p,q:r.p?r.b/r.p:null})).sort((a,b)=>b.b-a.b);
+  const rows=sortiere(c,[...M.values()].map(r=>Object.assign(r,{d:r.b-r.p,q:r.p?r.b/r.p:null})));
   c.top.innerHTML=legend([{name:H.l,color:H.c},{name:B.l,color:B.c}]);
   hbars(c.chart,rows.slice(0,15).map(r=>({aus:['asg',r.a],label:r.a,vals:[{v:r.p,color:H.c,name:H.l},{v:r.b,color:B.c,name:B.l}],text:FILT.noBk?fh(r.p):fh(r.b),tip:`<b>${esc(r.a)}</b>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Ist/Plan',fp(r.q))+tipRow('','Issues',nf0.format(r.n))})));
   c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'n',l:'Issues',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':'',bk:1},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{sort:{k:'b',d:-1}}));
@@ -1050,7 +1075,7 @@ function rIssSub(c){
     if(!asgOk(sb)||AUS.asg.has(sb)||!yearOk(issDate(i)))continue;
     if(!M.has(sb))M.set(sb,{s:sb,n:0,d:0,p:0,selbst:0});const o=M.get(sb);o.n++;o.p+=i.est;if(dc.has(i.cat))o.d++;if(i.assignee===sb)o.selbst++;tot++;
   }
-  const rows=[...M.values()].map(r=>Object.assign(r,{o:r.n-r.d,a:tot?r.n/tot:0,dept:deptName(r.s)})).sort((a,b)=>b.n-a.n);
+  const rows=sortiere(c,[...M.values()].map(r=>Object.assign(r,{o:r.n-r.d,a:tot?r.n/tot:0,dept:deptName(r.s)})));
   const S={c:'var(--c3)',l:'Sonstige Issues'},Dd={c:'var(--c4)',l:'Defekte'};
   c.top.innerHTML=legend([{name:Dd.l,color:Dd.c},{name:S.l,color:S.c}]);
   hbars(c.chart,rows.slice(0,20).map(r=>({aus:['asg',r.s],label:r.s,vals:[{v:r.d,color:Dd.c,name:Dd.l},{v:r.o,color:S.c,name:S.l}],text:nf0.format(r.n)+' · '+fp(r.a),
@@ -1059,7 +1084,7 @@ function rIssSub(c){
     {sort:{k:'n',d:-1},sum:{s:'Summe',n:tot,a:tot?1:0,d:rows.reduce((x,r)=>x+r.d,0),o:rows.reduce((x,r)=>x+r.o,0),selbst:rows.reduce((x,r)=>x+r.selbst,0),p:rows.reduce((x,r)=>x+r.p,0)}}));
 }
 function rOverrun(c){
-  const rows=D.issues.filter(i=>asgOk(i.assignee)&&yearOk(issDate(i))&&(i.est>0||i.booked>0)).map(i=>({id:i.id,t:i.title,a:i.assignee,c:i.cat,s:i.state,p:i.est,b:i.booked,d:i.booked-i.est,q:i.est?i.booked/i.est:null})).sort((a,b)=>b.d-a.d);
+  const rows=D.issues.filter(i=>asgOk(i.assignee)&&yearOk(issDate(i))&&(i.est>0||i.booked>0)).map(i=>({id:i.id,t:i.title,a:i.assignee,c:i.cat,s:i.state,p:i.est,b:i.booked,d:i.booked-i.est,q:i.est?i.booked/i.est:null}));sortiere(c,rows);
   const top=rows.filter(r=>r.d>0).slice(0,10);
   c.top.innerHTML=legend([{name:'Überschreitung (abgerechnet − geplant)',color:'var(--c4)'}]);
   hbars(c.chart,top.map(r=>({aus:['iss',r.id],label:r.id+' '+r.t,vals:[{v:r.d,color:'var(--c4)',name:'Überschreitung'}],text:'+'+fh(r.d),tip:`<b>${esc(r.id)}</b><div style="color:var(--text-2);margin-bottom:4px">${esc(r.t)}</div>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Assignee',r.a)})),{lw:220});
@@ -1109,7 +1134,7 @@ function rWiDept(c){
 function rWiAsg(c){
   const M=new Map();let tot=0;
   for(const w of D.wis){if(!asgOk(w.assignee)||w.sc==='canceled'||!yearOk(wiDate(w)))continue;if(!M.has(w.assignee))M.set(w.assignee,{a:w.assignee,h:0,n:0,c:0});const o=M.get(w.assignee);o.h+=w.est;o.n++;if(w.sc==='closed')o.c++;tot+=w.est}
-  const rows=[...M.values()].map(r=>Object.assign(r,{p:tot?r.h/tot:0,dept:deptName(r.a)})).sort((a,b)=>b.h-a.h);
+  const rows=sortiere(c,[...M.values()].map(r=>Object.assign(r,{p:tot?r.h/tot:0,dept:deptName(r.a)})));
   c.top.innerHTML=legend([{name:'Anteil am Workitem-Aufwand',color:'var(--c3)'}]);
   hbars(c.chart,rows.slice(0,25).map(r=>({aus:['asg',r.a],label:r.a,vals:[{v:r.p,color:'var(--c3)',name:'Anteil'}],text:fp(r.p)+' · '+fh(r.h),tip:`<b>${esc(r.a)}</b>`+tipRow('var(--c3)','Anteil',fp(r.p))+tipRow('','Aufwand',fh(r.h))+tipRow('','Workitems',nf0.format(r.n)+' ('+nf0.format(r.c)+' closed)')})),{vw:130,fmt:fp});
   c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'dept',l:'Abteilung'},{k:'n',l:'Workitems',n:1},{k:'c',l:'closed',n:1},{k:'h',l:'Aufwand h',n:1,f:v=>nf1.format(v)},{k:'p',l:'Anteil',n:1,f:v=>fp(v)}],rows,{sum:{a:'Summe',n:rows.reduce((a,r)=>a+r.n,0),c:rows.reduce((a,r)=>a+r.c,0),h:tot,p:tot?1:0}}));
@@ -1119,7 +1144,7 @@ function rOnTime(c){
   for(const w of D.wis){if(w.sc!=='closed'||w.actual==null||w.planned==null||!asgOk(w.assignee)||!yearOk(w.actual))continue;
     if(!M.has(w.assignee))M.set(w.assignee,{a:w.assignee,n:0,ok:0,late:[]});const o=M.get(w.assignee);o.n++;
     const d=Math.floor(w.actual/DAY)-Math.floor(w.planned/DAY);if(d<=0)o.ok++;else o.late.push(d)}
-  const rows=[...M.values()].map(r=>({a:r.a,n:r.n,ok:r.ok,q:r.ok/r.n,late:r.late.length,dl:r.late.length?r.late.reduce((a,b)=>a+b,0)/r.late.length:null})).sort((a,b)=>b.n-a.n);
+  const rows=[...M.values()].map(r=>({a:r.a,n:r.n,ok:r.ok,q:r.ok/r.n,late:r.late.length,dl:r.late.length?r.late.reduce((a,b)=>a+b,0)/r.late.length:null}));sortiere(c,rows);
   c.top.innerHTML=legend([{name:'Anteil pünktlich',color:'var(--c2)'}]);
   hbars(c.chart,rows.slice(0,15).map(r=>({aus:['asg',r.a],label:r.a,vals:[{v:r.q,color:'var(--c2)',name:'pünktlich'}],text:fp(r.q)+' von '+r.n,tip:`<b>${esc(r.a)}</b>`+tipRow('var(--c2)','pünktlich',fp(r.q))+tipRow('','abgeschlossen',nf0.format(r.n))+tipRow('','verspätet',nf0.format(r.late))+tipRow('','Ø Verzug',fd(r.dl))})),{max:1,vw:110,fmt:fp});
   const n=rows.reduce((a,r)=>a+r.n,0),ok=rows.reduce((a,r)=>a+r.ok,0);
@@ -1129,7 +1154,7 @@ function rLeadPrefix(c){
   c.ctl.innerHTML=`<span class="inline-ctl">Basis <select class="sel" data-l="leadBasis"><option value="start">Start → Abschluss</option><option value="submit">Submit → Abschluss</option></select></span>
    <span class="inline-ctl">min. n <select class="sel" data-l="leadMin"><option>1</option><option>3</option><option>5</option><option>10</option></select></span>`;
   const it=leadItems(),M=new Map();for(const w of it){if(!M.has(w.prefix))M.set(w.prefix,[]);M.get(w.prefix).push(w.lt)}
-  const rows=[...M.entries()].map(([p,a])=>Object.assign({label:p},stats(a))).filter(r=>r.n>=+LOCAL.leadMin).sort((a,b)=>b.n-a.n);
+  const rows=[...M.entries()].map(([p,a])=>Object.assign({label:p},stats(a))).filter(r=>r.n>=+LOCAL.leadMin);sortiere(c,rows);
   c.top.innerHTML=legend([{name:'Durchschnitt',color:'var(--c1)',shape:'dia',fix:1},{name:'Median',color:'var(--c2)',shape:'rd',fix:1},{name:'Quartile 25–75 %',color:'var(--c3)',shape:'ln',fix:1}]);
   dotRange(c.chart,rows.slice(0,30));
   const all=stats(it.map(w=>w.lt));
@@ -1163,7 +1188,7 @@ function rForecast(c){
   const today=Date.now(),M=new Map();
   for(const w of D.wis){if(w.sc!=='open'||!asgOk(w.assignee))continue;if(!M.has(w.assignee))M.set(w.assignee,{a:w.assignee,n:0,h:0,od:0,noest:0});const o=M.get(w.assignee);o.n++;o.h+=w.est;if(!w.est)o.noest++;if(w.planned!=null&&w.planned<today)o.od++}
   const hz=+LOCAL.horizon;
-  const rows=[...M.values()].map(r=>{const wh=whOf(r.a),cap=wh*hz;return Object.assign(r,{dept:deptName(r.a)||klammer(r.a),wh,cap,d:cap-r.h,wk:wh?r.h/wh:null,u:cap?r.h/cap:null})}).sort((a,b)=>a.d-b.d);
+  const rows=[...M.values()].map(r=>{const wh=whOf(r.a),cap=wh*hz;return Object.assign(r,{dept:deptName(r.a)||klammer(r.a),wh,cap,d:cap-r.h,wk:wh?r.h/wh:null,u:cap?r.h/cap:null})});sortiere(c,rows);
   c.top.innerHTML=legend([{name:'Offener Aufwand',color:'var(--c2)',fix:1},{name:'über Kapazität',color:'var(--c4)',fix:1},{name:'Kapazität ('+(hz===1?'1 Woche':hz+' Wochen')+')',color:'var(--text)',shape:'ln',fix:1}]);
   bullet(c.chart,rows.map(r=>({label:r.a,load:r.h,cap:r.cap,n:r.n})));
   const S={a:'Summe',n:0,h:0,wh:0,cap:0,d:0,od:0};rows.forEach(r=>{S.n+=r.n;S.h+=r.h;S.wh+=r.wh;S.cap+=r.cap;S.d+=r.d;S.od+=r.od});S.wk=S.wh?S.h/S.wh:null;S.u=S.cap?S.h/S.cap:null;
@@ -1326,6 +1351,7 @@ function renderCard(r){
   CUR=r.id;
   try{r.render(c)}catch(e){console.error(e);c.chart.innerHTML='<div class="empty">Fehler beim Berechnen: '+esc(e.message)+'</div>'}
   CUR='';
+  if(c._sort)c.ctl.insertAdjacentHTML('afterbegin',c._sort);
   $$('select[data-l]',el).forEach(s=>s.value=String(LOCAL[s.dataset.l]));
   const open=OPEN.has(r.id)||(c.tableOpen&&!OPEN.has('!'+r.id));
   $('.c-tbl',el).innerHTML=c._t?`<details class="tbl" data-d="${r.id}" ${open?'open':''}><summary>Tabelle</summary>${c._t}</details>`:'';
@@ -1742,7 +1768,10 @@ function bind(){
     if(!e.target.closest('#ausPop'))pop.hidden=true;
     if(e.target.closest('.lg-bk'))bkUmschalten();
     const c=e.target.closest('[data-csv]');if(c)csv(c.dataset.csv);
-    const th=e.target.closest('[data-tbl] th');if(th){const id=th.closest('[data-tbl]').dataset.tbl,t=TABLES[id];t.sort={k:th.dataset.k,d:t.sort?.k===th.dataset.k?-t.sort.d:-1};th.closest('[data-tbl]').innerHTML=tableInner(id)}
+    const sd=e.target.closest('[data-sortdir]');if(sd){const id=sd.dataset.sortdir,st=SORTST[id]||PENDSORT[id]||TABLES[id]?.sort;if(st)sortSetzen(id,st.k,-st.d);return}
+    const th=e.target.closest('[data-tbl] th');if(th){const id=th.closest('[data-tbl]').dataset.tbl,t=TABLES[id],k=th.dataset.k,d=t.sort?.k===k?-t.sort.d:(istText(id,k)?1:-1);
+      if(SORTS[id]?.opts.some(o=>o[0]===k)){sortSetzen(id,k,d);return}   // Spalte gehört zu „Sortieren nach“: Diagramm zieht mit
+      t.sort={k,d};th.closest('[data-tbl]').innerHTML=tableInner(id)}
   });
   $('#ansBtn').onclick=e=>{e.stopPropagation();const p=$('#ansPanel');p.hidden=!p.hidden;$('#ansBtn').setAttribute('aria-expanded',String(!p.hidden))};
   $('#ansPanel').onchange=e=>{const id=e.target.dataset.ans;if(id)setHidden(id,!e.target.checked)};
@@ -1750,6 +1779,7 @@ function bind(){
   $('#ansAlle').onclick=()=>{REPORTS.forEach(r=>HID.delete(r.id));lsSet(LS.hid,[]);renderAll()};
   $('#ansKeine').onclick=()=>{REPORTS.forEach(r=>HID.add(r.id));lsSet(LS.hid,[...HID]);renderAll()};
   $('#reports').addEventListener('change',e=>{
+    const so=e.target.closest('select[data-sort]');if(so){sortSetzen(so.dataset.sort,so.value);return}
     const s=e.target.closest('select[data-l]');if(s){LOCAL[s.dataset.l]=s.value;const id=s.closest('[data-r]').dataset.r;rerender(s.dataset.l==='trendPrefix'?['leadTrend','leadDist']:s.dataset.l==='leadBasis'?['leadPrefix','leadTrend','leadDist']:[id])}
     const w=e.target.closest('input.wh');if(w){const p=w.dataset.p;CFG.people[p]=CFG.people[p]||{};CFG.people[p].wh=w.value.trim();lsSet(LS.cfg,CFG);rerender(['forecast'])}
   });
