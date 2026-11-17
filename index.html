@@ -293,7 +293,9 @@ td .wh{width:70px;height:26px;border-radius:8px;border:1px solid var(--line);bac
 .sortctl .x{font-family:var(--mono);font-size:13px}
 .c-top.mit-sort{display:flex;align-items:center;flex-wrap:wrap;gap:4px 14px}
 .c-top.mit-sort .legend{flex:1;min-width:200px;margin:2px 0}
-.c-top.mit-sort .sortctl{margin-left:auto}
+.ctl-zeile{margin-left:auto;display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:6px 14px}
+.inline-ctl .sel{max-width:190px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.c-top:not(.mit-sort):empty{display:none}
 .sortctl .x{width:26px;height:26px}
 
 /* Tooltip */
@@ -1365,7 +1367,9 @@ function renderCard(r){
   CUR=r.id;
   try{r.render(c)}catch(e){console.error(e);c.chart.innerHTML='<div class="empty">Fehler beim Berechnen: '+esc(e.message)+'</div>'}
   CUR='';
-  if(c._sort){c.top.classList.add('mit-sort');c.top.insertAdjacentHTML('beforeend',c._sort)}else c.top.classList.remove('mit-sort');
+  /* Bedienelemente der Karte stehen in der Zeile neben der Legende, nicht im Kopf – der Titel bleibt frei. */
+  const ctlHtml=c.ctl.innerHTML;c.ctl.innerHTML='';
+  if(ctlHtml||c._sort){c.top.classList.add('mit-sort');c.top.insertAdjacentHTML('beforeend',`<span class="ctl-zeile">${ctlHtml}${c._sort||''}</span>`)}else c.top.classList.remove('mit-sort');
   $$('select[data-l]',el).forEach(s=>s.value=String(LOCAL[s.dataset.l]));
   const open=OPEN.has(r.id)||(c.tableOpen&&!OPEN.has('!'+r.id));
   $('.c-tbl',el).innerHTML=c._t?`<details class="tbl" data-d="${r.id}" ${open?'open':''}><summary>Tabelle</summary>${c._t}</details>`:'';
