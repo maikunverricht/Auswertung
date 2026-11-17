@@ -93,7 +93,7 @@ button,input,select{font:inherit;color:inherit}
 .pill svg{width:16px;height:16px;flex:none}
 .sun{display:none}html[data-theme="light"] .sun{display:block}html[data-theme="light"] .moon{display:none}
 
-main{position:relative;z-index:1;max-width:var(--max);margin:0 auto;padding:0 var(--pad) 60px}
+main{position:relative;max-width:var(--max);margin:0 auto;padding:0 var(--pad) 60px}
 .hero{padding:calc(92px + env(safe-area-inset-top)) 0 10px}
 .eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.2em;text-transform:uppercase;color:var(--text-3);display:flex;align-items:center;gap:12px}
 .eyebrow::before{content:"";width:28px;height:1px;background:var(--amber)}
@@ -124,8 +124,45 @@ h1 em{font-style:italic;font-weight:600;background:linear-gradient(94deg,var(--e
 .drop > div{min-width:0}
 
 /* Filterleiste */
-.filters{position:sticky;top:calc(70px + env(safe-area-inset-top));z-index:30;margin-top:18px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;
-  background:var(--surface)}
+/* Filter als Seitenpanel links – ein- und ausblendbar */
+:root{--fw:292px}
+.filters{position:fixed;left:var(--pad);top:calc(78px + env(safe-area-inset-top));bottom:calc(18px + env(safe-area-inset-bottom));width:var(--fw);z-index:35;
+  display:flex;flex-direction:column;padding:0;background:var(--surface);overflow:hidden;
+  transform:translateX(calc(-100% - 40px));opacity:0;visibility:hidden;
+  transition:transform var(--t-m) var(--kurve),opacity var(--t-m),visibility 0s var(--t-m)}
+body.f-auf .filters{transform:none;opacity:1;visibility:visible;transition:transform var(--t-m) var(--kurve),opacity var(--t-m),visibility 0s}
+.f-kopf{display:flex;align-items:center;justify-content:space-between;padding:12px 12px 10px 16px;border-bottom:1px solid var(--line)}
+.f-kopf h2{margin:0;font-size:15px;font-weight:700;letter-spacing:-.01em;font-variation-settings:'wdth' 110}
+.f-body{flex:1;overflow:auto;padding:12px 14px 16px;display:flex;flex-direction:column;gap:13px;overscroll-behavior:contain}
+.filters .fl{flex-direction:column;align-items:stretch;gap:5px}
+.filters .fl > .sel,.filters .fl > button.sel{width:100%;text-align:left}
+.filters .fl > .pill{align-self:flex-start}
+.filters .ms-panel{position:static;margin-top:4px;min-width:0;max-height:280px;box-shadow:none;background:var(--film);-webkit-backdrop-filter:none;backdrop-filter:none}
+.f-trenn{margin:6px 0 -4px;padding-top:12px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-3)}
+.f-reset{align-self:flex-start;margin-top:4px}
+.filters .chips{flex-direction:column;align-items:flex-start}
+.f-n{min-width:18px;height:18px;padding:0 5px;border-radius:100px;display:inline-grid;place-items:center;font:600 10.5px/1 var(--mono);background:var(--amber);color:var(--ink)}
+.f-n[hidden]{display:none}
+.f-griff{position:fixed;left:0;top:50%;z-index:34;transform:translateY(-50%);display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:14px 7px 14px 6px;border-radius:0 14px 14px 0;border:1px solid var(--glass-edge);border-left:0;background:var(--glass);box-shadow:var(--shadow);
+  -webkit-backdrop-filter:blur(15px) saturate(1.3);backdrop-filter:blur(15px) saturate(1.3);cursor:pointer;color:var(--text-2);
+  transition:color var(--t-s),padding var(--t-s),opacity var(--t-m)}
+.f-griff span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:10.5px;letter-spacing:.18em;text-transform:uppercase}
+.f-griff:hover{color:var(--text);padding-left:10px}
+.f-griff b{min-width:18px;height:18px;padding:0 5px;border-radius:100px;display:grid;place-items:center;font:600 10.5px/1 var(--mono);background:var(--amber);color:var(--ink)}
+body.f-auf .f-griff{opacity:0;pointer-events:none}
+.f-summe{display:flex;flex-wrap:wrap;gap:6px 14px;align-items:center;margin-top:16px;font-family:var(--mono);font-size:11.5px;color:var(--text-3)}
+.f-summe b{color:var(--text-2);font-weight:500}
+.f-summe button{all:unset;cursor:pointer;color:var(--amber);font-family:var(--mono);font-size:11.5px}
+.f-summe button:hover{text-decoration:underline}
+body.f-auf .f-summe{display:none}
+#btnFilter[aria-expanded="true"]{background:var(--glass);border-color:var(--line-hi)}
+/* Breite Bildschirme: Inhalt rückt zur Seite. Schmale: Panel liegt darüber. */
+@media (min-width:1100px){
+  main,footer.pf{transition:margin var(--t-m) var(--kurve),padding var(--t-m) var(--kurve)}
+  body.f-auf main,body.f-auf footer.pf{margin-left:max(calc(var(--fw) + var(--pad) + 14px),calc((100vw - var(--max)) / 2))}
+}
+@media (max-width:1099px){body.f-auf::after{content:"";position:fixed;inset:0;z-index:33;background:color-mix(in srgb,var(--void) 55%,transparent)}}
 .fl{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3)}
 .sel{height:30px;border-radius:100px;border:1px solid var(--glass-edge);background:var(--glass);padding:0 28px 0 12px;font-family:var(--display);
   font-size:13px;letter-spacing:0;text-transform:none;color:var(--text);cursor:pointer;appearance:none;-webkit-appearance:none;
@@ -295,7 +332,7 @@ dialog.dlg::backdrop{background:color-mix(in srgb,#04070B 74%,transparent);-webk
 .ppl td input{height:26px;border-radius:8px;border:1px solid var(--line);background:var(--film);padding:0 8px;font-size:12.5px;width:100%}
 .ppl td input.num{width:80px;text-align:right;font-family:var(--mono)}
 
-footer.pf{position:relative;z-index:1;max-width:var(--max);margin:0 auto;padding:22px var(--pad) 36px;display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:space-between;
+footer.pf{position:relative;max-width:var(--max);margin:0 auto;padding:22px var(--pad) 36px;display:flex;flex-wrap:wrap;gap:10px 22px;justify-content:space-between;
   border-top:1px solid var(--line);font-family:var(--mono);font-size:11.5px;color:var(--text-3)}
 
 .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);z-index:95;padding:10px 16px;border-radius:100px;border:1px solid var(--glass-edge);
@@ -370,7 +407,8 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
   .nav-r{gap:6px}
   .files{grid-template-columns:1fr}
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .filters{position:static}
+  :root{--fw:min(320px,86vw)}
+  .filters{left:8px}
   .fl-r{margin-left:0}
 }
 @media print{
@@ -392,6 +430,9 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
       <button class="pill" id="btnSettings" type="button" title="Spalten, Einheiten, Personen">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
         <span class="hide-sm">Einstellungen</span></button>
+      <button class="pill" id="btnFilter" type="button" aria-expanded="false" aria-controls="filters" title="Filter ein- und ausblenden (F)" hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4-2v-4.5z"/></svg>
+        <span class="hide-sm">Filter</span><b class="f-n" id="fN" hidden></b></button>
       <div class="ans-menue">
         <button class="pill" id="ansBtn" type="button" aria-haspopup="true" aria-expanded="false" title="Berichte ein- und ausblenden">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/></svg>
@@ -432,19 +473,25 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
       <input type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label>
   </section>
 
-  <section class="filters glass" id="filters" aria-label="Filter">
-    <span class="fl">Jahr <select class="sel" id="fYear"></select></span>
-    <span class="fl ms">Assignee <button class="sel" id="fAsgBtn" type="button" style="min-width:150px;text-align:left">Alle</button>
-      <div class="ms-panel" id="fAsgPanel" hidden></div></span>
-    <span class="fl">Issue-Datum <select class="sel" id="fIssDate"><option value="submit">Submit</option><option value="inj">Defekt-Injektion</option></select></span>
-    <span class="fl">Workitem-Datum <select class="sel" id="fWiDate"><option value="actual">Abschluss (actual)</option><option value="submit">Submit</option><option value="start">Start</option><option value="planned">Geplant</option></select></span>
-    <span class="fl">Abteilung aus <select class="sel" id="fDept"><option value="klammer">Assignee (Klammer)</option><option value="map">Zuordnung Person</option><option value="sub">Subcategory</option><option value="projIss">Projekt-ID Issue</option><option value="projRel">Projekt-ID Release</option></select></span>
-    <span class="fl" id="fAus" hidden>Ausgeblendet <span id="fAusListe" class="chips"></span></span>
-    <span class="fl">Anzeige <button class="pill sm on" id="fBk" type="button" aria-pressed="true" title="Abgerechneten Aufwand ein- oder ausblenden">Abgerechnet an</button></span>
-    <span class="fl ms">Defekt-Kategorie <button class="sel" id="fCatBtn" type="button" style="min-width:120px;text-align:left">automatisch</button>
-      <div class="ms-panel" id="fCatPanel" hidden></div></span>
-    
-  </section>
+  <aside class="filters glass" id="filters" aria-label="Filter" hidden>
+    <div class="f-kopf"><h2>Filter</h2><button class="x" id="fZu" type="button" aria-label="Filter ausblenden" title="Ausblenden (F)">‹</button></div>
+    <div class="f-body">
+    <label class="fl">Jahr <select class="sel" id="fYear"></select></label>
+    <div class="fl ms">Assignee <button class="sel" id="fAsgBtn" type="button">Alle</button>
+      <div class="ms-panel" id="fAsgPanel" hidden></div></div>
+    <div class="fl" id="fAus" hidden>Ausgeblendet <span id="fAusListe" class="chips"></span></div>
+    <div class="fl">Anzeige <button class="pill sm on" id="fBk" type="button" aria-pressed="true" title="Abgerechneten Aufwand ein- oder ausblenden">Abgerechnet an</button></div>
+    <div class="fl ms">Defekt-Kategorie <button class="sel" id="fCatBtn" type="button">automatisch</button>
+      <div class="ms-panel" id="fCatPanel" hidden></div></div>
+    <p class="f-trenn">Datumsbasis und Zuordnung</p>
+    <label class="fl">Issue-Datum <select class="sel" id="fIssDate"><option value="submit">Submit</option><option value="inj">Defekt-Injektion</option></select></label>
+    <label class="fl">Workitem-Datum <select class="sel" id="fWiDate"><option value="actual">Abschluss (actual)</option><option value="submit">Submit</option><option value="start">Start</option><option value="planned">Geplant</option></select></label>
+    <label class="fl">Abteilung aus <select class="sel" id="fDept"><option value="klammer">Assignee (Klammer)</option><option value="map">Zuordnung Person</option><option value="sub">Subcategory</option><option value="projIss">Projekt-ID Issue</option><option value="projRel">Projekt-ID Release</option></select></label>
+    <button class="pill sm f-reset" id="fReset" type="button">Filter zurücksetzen</button>
+    </div>
+  </aside>
+  <button class="f-griff" id="fGriff" type="button" aria-label="Filter einblenden" title="Filter einblenden (F)" hidden><span>Filter</span><b id="fGriffN" hidden></b></button>
+  <div class="f-summe" id="fSumme" hidden></div>
 
   <dl class="kpis" id="kpis"></dl>
   <div id="reports"></div>
@@ -704,7 +751,7 @@ function build(){
     if(iss){iss.booked+=h;iss.nb++}
     bks.push(b);
   }
-  const people=new Set();issues.forEach(i=>people.add(i.assignee));wis.forEach(w=>people.add(w.assignee));bks.forEach(b=>b.person&&people.add(b.person));
+  const people=new Set();issues.forEach(i=>{people.add(i.assignee);if(i.submitter)people.add(i.submitter)});wis.forEach(w=>people.add(w.assignee));bks.forEach(b=>b.person&&people.add(b.person));
   for(const p of people)if(!CFG.people[p])CFG.people[p]={dept:'',wh:''};
   const cats=[...new Set(issues.map(i=>i.cat))].sort();
   const years=new Set();
@@ -951,6 +998,7 @@ const REPORTS=[
  {id:'defMon',grp:'issues',wide:true,title:'Defekt-Aufwand pro Monat',sub:()=>{const c=[...defCats()];return 'Kategorien: '+(c.length?c.join(', '):'keine erkannt – im Filter „Defekt-Kategorie“ wählen')},render:monthReport(true)},
  {id:'issYear',grp:'issues',title:'Issues pro Jahr',sub:()=>'Geplant und abgerechnet, gesamt und Defekte',render:rIssYear},
  {id:'issAsg',grp:'issues',title:'Issue-Aufwand pro Assignee',sub:()=>yearTxt()+' · geplant gegen abgerechnet',render:rIssAsg},
+ {id:'issSub',grp:'issues',title:'Issues je Submitter',sub:()=>yearTxt()+' · wer wie viele Issues anlegt (Spalte '+CFG.map.iss.submitter+')',render:rIssSub},
  {id:'overrun',grp:'issues',title:'Plan/Ist-Abweichung je Issue',sub:()=>yearTxt()+' · größte Überschreitungen zuerst',render:rOverrun},
  {id:'defLat',grp:'issues',title:'Defekt-Entdeckungszeit',sub:()=>'Tage von Defekt-Injektion bis Submit, je Jahr des Submits',render:rDefLat},
  {id:'wiYear',grp:'wi',title:'Workitem-Aufwand pro Jahr',sub:()=>'Estimated Effort, Jahr nach '+wiDateTxt(),render:rWiYear},
@@ -993,6 +1041,22 @@ function rIssAsg(c){
   c.top.innerHTML=legend([{name:H.l,color:H.c},{name:B.l,color:B.c}]);
   hbars(c.chart,rows.slice(0,15).map(r=>({aus:['asg',r.a],label:r.a,vals:[{v:r.p,color:H.c,name:H.l},{v:r.b,color:B.c,name:B.l}],text:FILT.noBk?fh(r.p):fh(r.b),tip:`<b>${esc(r.a)}</b>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Ist/Plan',fp(r.q))+tipRow('','Issues',nf0.format(r.n))})));
   c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'n',l:'Issues',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':'',bk:1},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{sort:{k:'b',d:-1}}));
+}
+function rIssSub(c){
+  /* Grundlage sind alle Issues – der Personenfilter und das Ausblenden wirken hier auf den Submitter, nicht auf den Assignee. */
+  const dc=defCats(),M=new Map();let tot=0;
+  for(const i of D.full.issues){
+    if(AUS.iss.has(i.id))continue;const sb=i.submitter||'(ohne Submitter)';
+    if(!asgOk(sb)||AUS.asg.has(sb)||!yearOk(issDate(i)))continue;
+    if(!M.has(sb))M.set(sb,{s:sb,n:0,d:0,p:0,selbst:0});const o=M.get(sb);o.n++;o.p+=i.est;if(dc.has(i.cat))o.d++;if(i.assignee===sb)o.selbst++;tot++;
+  }
+  const rows=[...M.values()].map(r=>Object.assign(r,{o:r.n-r.d,a:tot?r.n/tot:0,dept:deptName(r.s)})).sort((a,b)=>b.n-a.n);
+  const S={c:'var(--c3)',l:'Sonstige Issues'},Dd={c:'var(--c4)',l:'Defekte'};
+  c.top.innerHTML=legend([{name:Dd.l,color:Dd.c},{name:S.l,color:S.c}]);
+  hbars(c.chart,rows.slice(0,20).map(r=>({aus:['asg',r.s],label:r.s,vals:[{v:r.d,color:Dd.c,name:Dd.l},{v:r.o,color:S.c,name:S.l}],text:nf0.format(r.n)+' · '+fp(r.a),
+    tip:`<b>${esc(r.s)}</b>`+tipRow('','Issues gesamt',nf0.format(r.n)+' ('+fp(r.a)+')')+tipRow(Dd.c,Dd.l,nf0.format(r.d))+tipRow(S.c,S.l,nf0.format(r.o))+tipRow('','sich selbst zugewiesen',nf0.format(r.selbst))+tipRow('','Geplant',fh(r.p))})),{fmt:v=>nf0.format(v),vw:96,lw:220});
+  c.table(table(c.id,[{k:'s',l:'Submitter'},{k:'dept',l:'Abteilung'},{k:'n',l:'Issues',n:1},{k:'a',l:'Anteil',n:1,f:v=>fp(v)},{k:'d',l:'Defekte',n:1},{k:'o',l:'Sonstige',n:1},{k:'selbst',l:'selbst zugewiesen',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)}],rows,
+    {sort:{k:'n',d:-1},sum:{s:'Summe',n:tot,a:tot?1:0,d:rows.reduce((x,r)=>x+r.d,0),o:rows.reduce((x,r)=>x+r.o,0),selbst:rows.reduce((x,r)=>x+r.selbst,0),p:rows.reduce((x,r)=>x+r.p,0)}}));
 }
 function rOverrun(c){
   const rows=D.issues.filter(i=>asgOk(i.assignee)&&yearOk(issDate(i))&&(i.est>0||i.booked>0)).map(i=>({id:i.id,t:i.title,a:i.assignee,c:i.cat,s:i.state,p:i.est,b:i.booked,d:i.booked-i.est,q:i.est?i.booked/i.est:null})).sort((a,b)=>b.d-a.d);
@@ -1158,6 +1222,7 @@ const INFO={
  defMon:()=>[['Auswahl','Nur Issues der Kategorie (Spalte '+CFG.map.iss.cat+'): '+defTxt()+'. Änderbar im Filter „Defekt-Kategorie“.'],['Geplant',planTxt()],['Abgerechnet',bookTxt()],['Filter','Jahr, Assignee.']],
  issYear:()=>[['Rechnung','Wie die Monatsberichte, je Kalenderjahr zusammengefasst – gesamt und nur Defekte ('+defTxt()+').'],['Def.-Anteil','Abgerechnet Defekte ÷ abgerechnet gesamt.'],['Filter','Assignee. Zeigt immer alle Jahre.']],
  issAsg:()=>[['Geplant','Estimated Effort der Issues je Assignee (Spalte '+CFG.map.iss.assignee+').'],['Abgerechnet',bookTxt()],['Zuordnung',asgTxt()],['Anzeige','Grafik: die 15 mit dem meisten abgerechneten Aufwand. Tabelle: alle.'],['Filter','Jahr, Assignee.']],
+ issSub:()=>[['Rechnung','Anzahl Issues je Submitter (Datei 1, Spalte '+CFG.map.iss.submitter+'), getrennt nach Defekten ('+defTxt()+') und sonstigen.'],['Anteil','Issues der Person ÷ alle gezählten Issues.'],['Selbst','Issues, bei denen Submitter und Assignee dieselbe Person sind.'],['Jahr nach',issD()+'.'],['Filter','Jahr. Assignee-Filter und Ausblenden wirken hier auf den Submitter.']],
  overrun:()=>[['Rechnung','Je Issue: gesamter abgerechneter Aufwand minus Estimated Effort. Positiv = überschritten.'],['Abgerechnet',bookTxt()],['Anzeige','Grafik: die 10 größten Überschreitungen. Tabelle: alle Issues mit Plan oder Ist.'],['Filter','Jahr (nach '+issD()+'), Assignee.']],
  defLat:()=>[['Rechnung','Je Defekt: Submit-Datum (Spalte '+CFG.map.iss.submit+') minus Defekt-Injektions-Datum (Spalte '+CFG.map.iss.inj+'), in Kalendertagen.'],['Auswahl','Issues der Kategorie '+defTxt()+' mit beiden Daten; negative Abstände fallen weg.'],['Gruppe','Jahr des Submits. Je Jahr Durchschnitt, Median, 85-%-Wert und Maximum.'],['Filter','Assignee. Zeigt immer alle Jahre.']],
  wiYear:()=>[['Rechnung','Summe Estimated Effort (Datei 2, Spalte '+CFG.map.wi.est+') je Jahr.'],['Jahr nach',wiDTxt()+'.'],['Aufteilung','Gesamt enthält closed, offene und canceled; die Tabelle zeigt sie getrennt.'],['Filter','Assignee, Workitem-Datum. Zeigt immer alle Jahre.']],
@@ -1236,7 +1301,7 @@ function renderAll(){
   TIPS.clear();
   const has=D&&(D.issues.length||D.wis.length||D.bks.length);
   renderStats();
-  $('#filters').hidden=!has;$('#kpis').hidden=!has;
+  $('#filters').hidden=!has;$('#kpis').hidden=!has;$('#btnFilter').hidden=!has;$('#fGriff').hidden=!has;if(!has){$('#fSumme').hidden=true;document.body.classList.remove('f-auf')}
   const host=$('#reports');
   if(!has){host.innerHTML=`<div class="glass card" style="margin-top:22px"><div class="empty" style="padding:40px 10px">Noch keine Daten. Die drei Dateien oben hineinziehen – oder mit „Beispiel“ ausprobieren.<br>Spaltenzuordnung, Einheiten und Wochenstunden stehen unter „Einstellungen“.</div></div>`;return}
   renderFilters();renderKpis();
@@ -1313,6 +1378,7 @@ function renderFilters(){
   if(FILT.asg)FILT.asg=FILT.asg.filter(a=>D.people.includes(a));
   $('#fAsgBtn').textContent=!FILT.asg?'Alle ('+D.people.length+')':!FILT.asg.length?'keine':FILT.asg.length===1?FILT.asg[0]:FILT.asg.length+' gewählt';
   const auto=[...defCats()];
+  filterSumme();
   $('#fCatBtn').textContent=FILT.cats?(FILT.cats.length===1?FILT.cats[0]:FILT.cats.length+' gewählt'):'automatisch'+(auto.length?' ('+auto.length+')':'');
 }
 function msPanel(panel,list,getSel,onChange,o={}){
@@ -1335,6 +1401,34 @@ function setHidden(id,h){
 function saveFilt(){lsSet(LS.filt,FILT)}
 function filtChanged(){saveFilt();sichten();renderFilters();rerender()}
 function bkUmschalten(){FILT.noBk=!FILT.noBk;filtChanged();toast(FILT.noBk?'Abgerechnet ausgeblendet':'Abgerechnet eingeblendet')}
+
+/* ─── Filter-Panel ─── */
+function aktiveFilter(){
+  const a=[];
+  if(FILT.year!=='all')a.push(['Jahr',FILT.year]);
+  if(FILT.asg)a.push(['Assignee',FILT.asg.length===1?FILT.asg[0]:FILT.asg.length+' Personen']);
+  if(FILT.cats)a.push(['Defekt',FILT.cats.length===1?FILT.cats[0]:FILT.cats.length+' Kategorien']);
+  if(FILT.noBk)a.push(['Anzeige','Abgerechnet aus']);
+  if(FILT.issDate!=='submit')a.push(['Issue-Datum','Defekt-Injektion']);
+  if(FILT.wiDate!=='actual')a.push(['Workitem-Datum',$('#fWiDate').selectedOptions[0]?.text||FILT.wiDate]);
+  if(FILT.dept!=='klammer')a.push(['Abteilung',$('#fDept').selectedOptions[0]?.text||FILT.dept]);
+  const n=ausZahl();if(n)a.push(['Ausgeblendet',n+(n===1?' Eintrag':' Einträge')]);
+  return a;
+}
+function filterSumme(){
+  const a=aktiveFilter(),n=a.length;
+  for(const id of ['fN','fGriffN']){const el=$('#'+id);el.hidden=!n;el.textContent=n}
+  const su=$('#fSumme');su.hidden=!D||$('#filters').hidden;
+  su.innerHTML=n?a.map(([k,v])=>`<span>${esc(k)} <b>${esc(v)}</b></span>`).join('')+'<button type="button" data-fopen>ändern</button>':'<span>Keine Filter aktiv · alle Jahre, alle Personen</span><button type="button" data-fopen>Filter</button>';
+}
+function filterPanel(auf){
+  if(auf===undefined)auf=!document.body.classList.contains('f-auf');
+  document.body.classList.toggle('f-auf',auf);$('#btnFilter').setAttribute('aria-expanded',String(auf));
+  try{localStorage.setItem('wb-ausw-filterauf',auf?'1':'0')}catch(e){}
+  if(auf)setTimeout(()=>$('#fYear')?.focus({preventScroll:true}),60);
+  // Breite ändert sich → Diagramme neu zeichnen, wenn der Inhalt zur Seite rückt
+  if(innerWidth>=1100&&D)setTimeout(()=>rerender(),460);
+}
 
 /* ─── Einstellungen ────────────────────────────────────────── */
 const LETTERS=(()=>{const a=[];for(let i=0;i<52;i++)a.push(i<26?String.fromCharCode(65+i):'A'+String.fromCharCode(39+i));return a})();
@@ -1613,6 +1707,14 @@ function bind(){
   $$('[data-close]').forEach(b=>b.onclick=()=>b.closest('dialog').close());
   $('#btnDemo').onclick=demo;
   $('#fBk').onclick=bkUmschalten;
+  $('#btnFilter').onclick=()=>filterPanel();$('#fGriff').onclick=()=>filterPanel(true);$('#fZu').onclick=()=>filterPanel(false);
+  $('#fReset').onclick=()=>{Object.assign(FILT,{noBk:false,year:'all',asg:null,issDate:'submit',wiDate:'actual',dept:'klammer',cats:null});Object.values(AUS).forEach(v=>v.clear());ausSichern();filtChanged();toast('Filter zurückgesetzt')};
+  addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&document.body.classList.contains('f-auf')&&!e.target.closest('dialog')){$$('.ms-panel').forEach(x=>x.hidden=true);filterPanel(false);return}
+    if(e.target.closest('input,textarea,select,[contenteditable]'))return;
+    if((e.key==='f'||e.key==='F')&&!e.metaKey&&!e.ctrlKey&&!e.altKey&&!$('#filters').hidden){e.preventDefault();filterPanel()}
+});
+  try{if(localStorage.getItem('wb-ausw-filterauf')==='1'&&innerWidth>=1100)document.body.classList.add('f-auf')}catch(e){}
   $('#fYear').onchange=e=>{FILT.year=e.target.value;filtChanged()};
   $('#fIssDate').onchange=e=>{FILT.issDate=e.target.value;filtChanged()};
   $('#fWiDate').onchange=e=>{FILT.wiDate=e.target.value;filtChanged()};
@@ -1627,6 +1729,8 @@ function bind(){
     const ib=e.target.closest('.info-btn');
     $$('.info-i.offen').forEach(x=>{if(!ib||x!==ib.parentElement){x.classList.remove('offen');x.querySelector('.info-btn').setAttribute('aria-expanded','false')}});
     if(ib){const h=ib.parentElement,auf=!h.classList.contains('offen');infoLageSetzen(ib);h.classList.toggle('offen',auf);ib.setAttribute('aria-expanded',String(auf));return}
+    if(e.target.closest('[data-fopen]')){filterPanel(true);return}
+    if(innerWidth<1100&&document.body.classList.contains('f-auf')&&!e.target.closest('#filters,#btnFilter,#fGriff,.toast,#ausPop'))filterPanel(false);
     const kl=e.target.closest('[data-klapp]');if(kl){klappen(kl.dataset.klapp);return}
     const ein=e.target.closest('[data-ein]');if(ein){if(ein.dataset.ein==='*')Object.values(AUS).forEach(v=>v.clear());else AUS[ein.dataset.ein].delete(ein.dataset.wert);ausSichern();filtChanged();toast('Wieder eingeblendet');return}
     const ser=e.target.closest('.lg-ser');if(ser){const id=ser.closest('[data-r]').dataset.r,key=id+'|'+ser.dataset.ser;if(SERAUS.has(key))SERAUS.delete(key);else SERAUS.add(key);lsSet('wb-ausw-reihen',[...SERAUS]);rerender([id]);return}
