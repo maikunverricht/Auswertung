@@ -291,6 +291,10 @@ td .wh{width:70px;height:26px;border-radius:8px;border:1px solid var(--line);bac
 .inline-ctl{display:flex;gap:6px;align-items:center;font-family:var(--mono);font-size:10.5px;color:var(--text-3);letter-spacing:.06em;text-transform:uppercase}
 .inline-ctl .sel{height:28px;font-size:12.5px}
 .sortctl .x{font-family:var(--mono);font-size:13px}
+.c-top.mit-sort{display:flex;align-items:center;flex-wrap:wrap;gap:4px 14px}
+.c-top.mit-sort .legend{flex:1;min-width:200px;margin:2px 0}
+.c-top.mit-sort .sortctl{margin-left:auto}
+.sortctl .x{width:26px;height:26px}
 
 /* Tooltip */
 #tip{position:fixed;z-index:90;pointer-events:none;padding:8px 11px;border-radius:11px;border:1px solid var(--glass-edge);background:var(--surface);
@@ -969,6 +973,13 @@ function leadItems(){
 
 /* ─── Sortieren nach (Diagramm und Tabelle gemeinsam) ─── */
 const SORTS={
+  issMon:{def:'k',opts:[['k','Monat',1],['p','Geplant'],['b','Abgerechnet'],['d','Differenz'],['n','Anzahl Issues']]},
+  defMon:{def:'k',opts:[['k','Monat',1],['p','Geplant'],['b','Abgerechnet'],['d','Differenz'],['n','Anzahl Issues']]},
+  issYear:{def:'y',dd:1,opts:[['y','Jahr'],['p','Geplant'],['b','Abgerechnet'],['dp','Defekt geplant'],['db','Defekt abgerechnet'],['n','Anzahl Issues']]},
+  defLat:{def:'y',dd:1,opts:[['y','Jahr'],['avg','Durchschnitt'],['med','Median'],['n','Anzahl']]},
+  wiYear:{def:'y',dd:1,opts:[['y','Jahr'],['h','Aufwand'],['n','Anzahl'],['hc','closed'],['ho','offen']]},
+  wiDept:{def:'t',opts:[['t','Gesamtaufwand'],['d','Abteilung',1]]},
+  leadDist:{def:'i',dd:1,opts:[['i','Zeitspanne'],['n','Anzahl']]},
   issAsg:{def:'b',opts:[['b','Abgerechnet'],['p','Geplant'],['d','Differenz'],['q','Ist/Plan'],['n','Anzahl Issues'],['a','Name',1]]},
   issSub:{def:'n',opts:[['n','Anzahl Issues'],['d','Defekte'],['o','Sonstige'],['selbst','selbst zugewiesen'],['p','Geplant'],['s','Name',1],['dept','Abteilung',1]]},
   overrun:{def:'d',opts:[['d','Überschreitung'],['q','Ist/Plan'],['b','Abgerechnet'],['p','Geplant'],['id','ID',1],['a','Assignee',1]]},
@@ -985,11 +996,11 @@ function sortCmp(k,d){return (a,b)=>{const x=a[k],y=b[k];const xn=x==null||(type
 function sortiere(c,rows){
   const cfg=SORTS[c.id];if(!cfg)return rows;
   let st=SORTST[c.id];if(!st||!cfg.opts.some(o=>o[0]===st.k))st={k:cfg.def,d:cfg.dd||(istText(c.id,cfg.def)?1:-1)};
-  rows.sort(sortCmp(st.k,st.d));PENDSORT[c.id]=st;
+  rows.sort(sortCmp(st.k,st.d));PENDSORT[c.id]=st;c._sortState=st;
   c._sort=`<span class="inline-ctl sortctl">Sortieren <select class="sel" data-sort="${c.id}" aria-label="Sortieren nach">${cfg.opts.map(o=>`<option value="${o[0]}" ${o[0]===st.k?'selected':''}>${esc(o[1])}</option>`).join('')}</select><button class="x" type="button" data-sortdir="${c.id}" title="${st.d<0?'absteigend – umkehren':'aufsteigend – umkehren'}" aria-label="Richtung umkehren">${st.d<0?'↓':'↑'}</button></span>`;
   return rows;
 }
-function sortSetzen(id,k,d){const t=istText(id,k);if(d==null)d=(k==='d'&&id==='forecast')?1:t?1:-1;SORTST[id]={k,d};lsSet('wb-ausw-sort',SORTST);rerender([id])}
+function sortSetzen(id,k,d){const t=istText(id,k);if(d==null)d=(SORTS[id]?.dd&&SORTS[id].def===k)?SORTS[id].dd:t?1:-1;SORTST[id]={k,d};lsSet('wb-ausw-sort',SORTST);rerender([id])}
 
 /* ─── Tabellen ─────────────────────────────────────────────── */
 const TABLES={};
@@ -1042,9 +1053,12 @@ const wiDateTxt=()=>$('#fWiDate').selectedOptions[0].text;
 
 function monthReport(def){return (c)=>{
   const {axis,plan,book,cnt}=issueMonthly(def);
-  const el=c.chart;c.top.innerHTML=legend([{name:H.l,color:H.c},{name:B.l,color:B.c}]);
-  vbars(el,axis,[{name:H.l,color:H.c,vals:plan},{name:B.l,color:B.c,vals:book}],{xl:ymLabel,tipTitle:i=>ymLong(axis[i]),extraTip:i=>tipRow('','Issues',nf0.format(cnt[i]))+(FILT.noBk?'':tipRow('','Ist/Plan',plan[i]?fp(book[i]/plan[i]):'–'))});
-  const rows=axis.map((k,i)=>({m:ymLong(k),k,n:cnt[i],p:plan[i],b:book[i],d:book[i]-plan[i],q:plan[i]?book[i]/plan[i]:null}));
+  const rows=sortiere(c,axis.map((k,i)=>({m:ymLong(k),k,n:cnt[i],p:plan[i],b:book[i],d:book[i]-plan[i],q:plan[i]?book[i]/plan[i]:null})));
+  const zeit=c._sortState.k==='k';
+  c.top.innerHTML=legend([{name:H.l,color:H.c},{name:B.l,color:B.c}]);
+  vbars(c.chart,rows.map(r=>r.k),[{name:H.l,color:H.c,vals:rows.map(r=>r.p)},{name:B.l,color:B.c,vals:rows.map(r=>r.b)}],
+    {xl:zeit&&c._sortState.d>0?ymLabel:(k=>{const [y,m]=k.split('-');return MON[m-1]+" '"+y.slice(2)}),tipTitle:i=>rows[i].m,
+     extraTip:i=>tipRow('','Issues',nf0.format(rows[i].n))+(FILT.noBk?'':tipRow('','Ist/Plan',rows[i].p?fp(rows[i].q):'–'))});
   const sp=plan.reduce((a,b)=>a+b,0),sb=book.reduce((a,b)=>a+b,0);
   c.table(table(c.id,[{k:'m',l:'Monat',sv:r=>r.k},{k:'n',l:'Issues',n:1,f:v=>nf0.format(v)},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abgerechnet h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':'',bk:1},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v)}],
     rows,{sum:{m:'Summe',n:cnt.reduce((a,b)=>a+b,0),p:sp,b:sb,d:sb-sp,q:sp?sb/sp:null}}));
@@ -1053,7 +1067,7 @@ function rIssYear(c){
   const dc=defCats(),Y=new Map();const g=y=>{if(!Y.has(y))Y.set(y,{y,p:0,b:0,dp:0,db:0,n:0,dn:0});return Y.get(y)};
   for(const i of D.issues){if(!asgOk(i.assignee))continue;const y=yOf(issDate(i));if(y==null)continue;const o=g(y);o.p+=i.est;o.n++;if(dc.has(i.cat)){o.dp+=i.est;o.dn++}}
   for(const b of D.bks){if(!asgOk(bookPerson(b)))continue;if(!b.iss&&!b.date)continue;const y=yOf(bookDate(b));if(y==null)continue;const o=g(y);o.b+=b.h;if(b.iss&&dc.has(b.iss.cat))o.db+=b.h}
-  const rows=[...Y.values()].sort((a,b)=>a.y-b.y);
+  const rows=sortiere(c,[...Y.values()]);
   const ser=[{name:'Geplant',color:'var(--c1)',vals:rows.map(r=>r.p)},{name:'Abgerechnet',color:'var(--c2)',vals:rows.map(r=>r.b)},{name:'Defekt geplant',color:'var(--c3)',vals:rows.map(r=>r.dp)},{name:'Defekt abgerechnet',color:'var(--c4)',vals:rows.map(r=>r.db)}];
   c.top.innerHTML=legend(ser);vbars(c.chart,rows.map(r=>String(r.y)),ser,{h:230});
   c.table(table(c.id,[{k:'y',l:'Jahr'},{k:'n',l:'Issues',n:1},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'dn',l:'Defekte',n:1},{k:'dp',l:'Def. geplant h',n:1,f:v=>nf1.format(v)},{k:'db',l:'Def. abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'ds',l:'Def.-Anteil',n:1,bk:1,f:(v,r)=>fp(r.b?r.db/r.b:null),sv:r=>r.b?r.db/r.b:0}],rows));
@@ -1094,7 +1108,7 @@ function rOverrun(c){
 function rDefLat(c){
   const dc=defCats(),Y=new Map();
   for(const i of D.issues){if(!dc.has(i.cat)||!asgOk(i.assignee)||i.inj==null||i.submit==null)continue;const d=(i.submit-i.inj)/DAY;if(d<0)continue;const y=yOf(i.submit);if(!Y.has(y))Y.set(y,[]);Y.get(y).push(d)}
-  const rows=[...Y.entries()].sort((a,b)=>a[0]-b[0]).map(([y,a])=>Object.assign({y:String(y)},stats(a)));
+  const rows=sortiere(c,[...Y.entries()].map(([y,a])=>Object.assign({y:String(y)},stats(a))));
   c.top.innerHTML=legend([{name:'Durchschnitt',color:'var(--c1)'},{name:'Median',color:'var(--c2)'}]);
   if(!rows.length){c.chart.innerHTML='<div class="empty">Keine Defekte mit Injektions- und Submit-Datum</div>'}
   else vbars(c.chart,rows.map(r=>r.y),[{name:'Durchschnitt',color:'var(--c1)',vals:rows.map(r=>r.avg)},{name:'Median',color:'var(--c2)',vals:rows.map(r=>r.med)}],{fmt:fd,h:210,extraTip:i=>tipRow('','Anzahl',nf0.format(rows[i].n))});
@@ -1103,8 +1117,7 @@ function rDefLat(c){
 function rWiYear(c){
   const Y=new Map();const g=y=>{if(!Y.has(y))Y.set(y,{y,n:0,h:0,hc:0,ho:0,hx:0});return Y.get(y)};
   for(const w of D.wis){if(!asgOk(w.assignee))continue;const y=yOf(wiDate(w));if(y==null)continue;const o=g(y);o.n++;o.h+=w.est;if(w.sc==='closed')o.hc+=w.est;else if(w.sc==='canceled')o.hx+=w.est;else o.ho+=w.est}
-  const rows=[...Y.values()].sort((a,b)=>a.y-b.y);
-  const sel=FILT.year;
+  const rows=sortiere(c,[...Y.values()]);
   c.top.innerHTML=legend([{name:'Workitem-Aufwand',color:'var(--c1)'}]);
   vbars(c.chart,rows.map(r=>String(r.y)),[{name:'Aufwand',color:'var(--c1)',vals:rows.map(r=>r.h)}],{valLabels:true,h:220,extraTip:i=>tipRow('','Workitems',nf0.format(rows[i].n))+tipRow('','closed',fh(rows[i].hc))+tipRow('','offen',fh(rows[i].ho))+tipRow('','canceled',fh(rows[i].hx))});
   const sum=rows.reduce((s,r)=>{for(const k of['n','h','hc','ho','hx'])s[k]+=r[k];return s},{y:'Summe',n:0,h:0,hc:0,ho:0,hx:0});
@@ -1125,11 +1138,12 @@ function rWiDept(c){
   const ys=[...Y.keys()].sort();
   const rows=ys.map(y=>{const parts={};let t=0;for(const [d,v] of Y.get(y)){const k=map(d);parts[k]=(parts[k]||0)+v;t+=v}return{label:String(y),parts,total:t}});
   if(rows.length>1){const parts={};let t=0;rows.forEach(r=>{for(const k in r.parts){parts[k]=(parts[k]||0)+r.parts[k];t+=r.parts[k]}});rows.push({label:'Gesamt',parts,total:t})}
-  c.top.innerHTML=legend(keys);stack100(c.chart,rows,keys,{aus:'dept'});
-  const depts=[...tot.keys()].sort((a,b)=>tot.get(b)-tot.get(a));
-  const trs=depts.map(d=>{const r={d};ys.forEach(y=>{const m=Y.get(y),v=m.get(d)||0,t=[...m.values()].reduce((a,b)=>a+b,0);r['h'+y]=v;r['p'+y]=t?v/t:0});r.t=tot.get(d);return r});
+  const depts=[...tot.keys()];
+  const trs=sortiere(c,depts.map(d=>{const r={d};ys.forEach(y=>{const m=Y.get(y),v=m.get(d)||0,t=[...m.values()].reduce((a,b)=>a+b,0);r['h'+y]=v;r['p'+y]=t?v/t:0});r.t=tot.get(d);return r}));
+  const ord=new Map(trs.map((r,i)=>[r.d,i]));const kk=[...keys].sort((a,b)=>(a.k==='__rest')-(b.k==='__rest')||(ord.get(a.k)??0)-(ord.get(b.k)??0));
+  c.top.innerHTML=legend(kk);stack100(c.chart,rows,kk,{aus:'dept'});
   const cols=[{k:'d',l:'Abteilung'}];ys.forEach(y=>{cols.push({k:'h'+y,l:y+' h',n:1,f:v=>nf1.format(v)},{k:'p'+y,l:y+' %',n:1,f:v=>fp(v)})});cols.push({k:'t',l:'Gesamt h',n:1,f:v=>nf1.format(v)});
-  c.table(table(c.id,cols,trs,{sort:{k:'t',d:-1}}));
+  c.table(table(c.id,cols,trs));
 }
 function rWiAsg(c){
   const M=new Map();let tot=0;
@@ -1178,10 +1192,10 @@ function rLeadTrend(c){
 function rLeadDist(c){
   const B=[[0,1,'< 1'],[1,3,'1–3'],[3,7,'3–7'],[7,14,'7–14'],[14,30,'14–30'],[30,60,'30–60'],[60,90,'60–90'],[90,1e9,'> 90']];
   const it=leadItems().filter(w=>LOCAL.trendPrefix==='*'||w.prefix===LOCAL.trendPrefix);
-  const cnt=B.map(([a,b])=>it.filter(w=>w.lt>=a&&w.lt<b).length);
+  const rows=sortiere(c,B.map(([a,b,l],i)=>{const n=it.filter(w=>w.lt>=a&&w.lt<b).length;return{i,b:l,n,p:it.length?n/it.length:0}}));
   c.top.innerHTML=legend([{name:'Workitems'+(LOCAL.trendPrefix!=='*'?' · '+LOCAL.trendPrefix:''),color:'var(--c3)'}]);
-  vbars(c.chart,B.map(b=>b[2]),[{name:'Workitems',color:'var(--c3)',vals:cnt}],{fmt:v=>nf0.format(v),valLabels:true,short:v=>nf0.format(v),h:210,tipTitle:i=>B[i][2]+' Tage',extraTip:i=>tipRow('','Anteil',fp(it.length?cnt[i]/it.length:0))});
-  c.table(table(c.id,[{k:'b',l:'Tage'},{k:'n',l:'Anzahl',n:1},{k:'p',l:'Anteil',n:1,f:v=>fp(v)}],B.map((b,i)=>({b:b[2],n:cnt[i],p:it.length?cnt[i]/it.length:0}))));
+  vbars(c.chart,rows.map(r=>r.b),[{name:'Workitems',color:'var(--c3)',vals:rows.map(r=>r.n)}],{fmt:v=>nf0.format(v),valLabels:true,short:v=>nf0.format(v),h:210,tipTitle:i=>rows[i].b+' Tage',extraTip:i=>tipRow('','Anteil',fp(rows[i].p))});
+  c.table(table(c.id,[{k:'b',l:'Tage',sv:r=>r.i},{k:'n',l:'Anzahl',n:1},{k:'p',l:'Anteil',n:1,f:v=>fp(v)}],rows));
 }
 function rForecast(c){
   c.ctl.innerHTML=`<span class="inline-ctl">Horizont <select class="sel" data-l="horizon"><option value="1">1 Woche</option><option value="2">2 Wochen</option><option value="4">4 Wochen</option><option value="8">8 Wochen</option><option value="13">Quartal</option></select></span>`;
@@ -1351,7 +1365,7 @@ function renderCard(r){
   CUR=r.id;
   try{r.render(c)}catch(e){console.error(e);c.chart.innerHTML='<div class="empty">Fehler beim Berechnen: '+esc(e.message)+'</div>'}
   CUR='';
-  if(c._sort)c.ctl.insertAdjacentHTML('afterbegin',c._sort);
+  if(c._sort){c.top.classList.add('mit-sort');c.top.insertAdjacentHTML('beforeend',c._sort)}else c.top.classList.remove('mit-sort');
   $$('select[data-l]',el).forEach(s=>s.value=String(LOCAL[s.dataset.l]));
   const open=OPEN.has(r.id)||(c.tableOpen&&!OPEN.has('!'+r.id));
   $('.c-tbl',el).innerHTML=c._t?`<details class="tbl" data-d="${r.id}" ${open?'open':''}><summary>Tabelle</summary>${c._t}</details>`:'';
