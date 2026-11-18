@@ -122,6 +122,14 @@ h1 em{font-style:italic;font-weight:600;background:linear-gradient(94deg,var(--e
 .drop .fn{font-family:var(--mono);font-size:11px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;display:block;margin-top:2px}
 .drop.ok .fn{color:var(--text-2)}
 .drop > div{min-width:0}
+.drop-w{display:flex;flex-direction:column;gap:5px;min-width:0}
+.q-leiste{display:flex;gap:6px;align-items:center;padding:0 4px;min-height:22px}
+.q-leiste button{font:inherit;font-size:11.5px;border:1px solid var(--line);background:transparent;color:var(--text-2);border-radius:999px;padding:2px 10px;cursor:pointer;line-height:1.5}
+.q-leiste button:hover{border-color:var(--line-hi);color:var(--text)}
+.q-leiste .q-auf{color:var(--teal);border-color:color-mix(in srgb,var(--teal) 45%,transparent)}
+.q-leiste .q-host{font-family:var(--mono);font-size:10.5px;color:var(--text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#dlgLink input{width:100%;box-sizing:border-box;font:inherit;font-size:13px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--film);color:var(--text)}
+#dlgLink .hinweis{font-size:12px;color:var(--text-3);margin:8px 0 0;line-height:1.45}
 
 /* Filterleiste */
 /* Filter als Seitenpanel links – ein- und ausblendbar */
@@ -469,15 +477,15 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
   </section>
 
   <section class="files" aria-label="Dateien">
-    <label class="drop glass" data-f="iss"><span class="shot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v5M12 16h.01"/></svg></span>
+    <div class="drop-w"><label class="drop glass" data-f="iss"><span class="shot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8"/><path d="M12 8v5M12 16h.01"/></svg></span>
       <div><span class="t-idx"><b>01</b> · Datei</span><h3>Issues</h3><span class="fn">.xlsx hierher ziehen oder tippen</span></div>
-      <input type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label>
-    <label class="drop glass" data-f="wi"><span class="shot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg></span>
+      <input type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label><div class="q-leiste" data-q></div></div>
+    <div class="drop-w"><label class="drop glass" data-f="wi"><span class="shot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 12l3 3 5-6"/></svg></span>
       <div><span class="t-idx"><b>02</b> · Datei</span><h3>Workitems</h3><span class="fn">.xlsx hierher ziehen oder tippen</span></div>
-      <input type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label>
-    <label class="drop glass" data-f="bk"><span class="shot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 2M9 3h6"/></svg></span>
+      <input type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label><div class="q-leiste" data-q></div></div>
+    <div class="drop-w"><label class="drop glass" data-f="bk"><span class="shot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="13" r="7"/><path d="M12 9v4l2.5 2M9 3h6"/></svg></span>
       <div><span class="t-idx"><b>03</b> · Datei</span><h3>Gebuchter Aufwand</h3><span class="fn">.xlsx hierher ziehen oder tippen</span></div>
-      <input type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label>
+      <input type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label><div class="q-leiste" data-q></div></div>
   </section>
 
   <aside class="filters glass" id="filters" aria-label="Filter" hidden>
@@ -542,6 +550,14 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
 <div id="ausPop" class="aus-pop" hidden></div>
 <div class="toast" id="toast"></div>
 
+<dialog class="dlg" id="dlgLink">
+  <div class="sheet">
+    <header><h3 id="linkTitel">Query-Link</h3><button class="pill sm" type="button" data-close>Schließen</button></header>
+    <div class="body"><label>Adresse der Query (öffnet die aktuellen Daten zum Export)<input id="linkUrl" type="url" inputmode="url" placeholder="https://…" autocomplete="off" spellcheck="false"></label>
+    <p class="hinweis">Nur http(s)-Adressen. Der Link wird im neuen Tab geöffnet; die exportierte Datei ziehst du danach auf die Kachel. Gespeichert wird nur hier im Browser.</p></div>
+    <footer><button class="pill primary sm" id="linkSave" type="button">Speichern</button><button class="pill sm" id="linkDel" type="button">Link entfernen</button></footer>
+  </div>
+</dialog>
 <dialog class="dlg" id="dlgSet">
   <div class="sheet">
     <header><h3>Einstellungen</h3><button class="pill sm" type="button" data-close>Schließen</button></header>
@@ -2479,7 +2495,37 @@ async function takeFiles(files,key){
     delete RAW._demo;persistRaw();build();renderAll();lesekopie();toast('Eingelesen');
   }catch(e){console.error(e);toast('Datei konnte nicht gelesen werden: '+e.message)}
 }
+/* Query-Links je Datei: öffnen die Quelle (z. B. ClearQuest/RQ1-Query) für frische Daten */
+const LS_Q='wb-ausw-query';
+const Q_NAME={iss:'Issues',wi:'Workitems',bk:'Gebuchter Aufwand'};
+let Q_WAHL='';
+function qLinks(){return lsGet(LS_Q,{})||{}}
+function qGueltig(u){try{const x=new URL(u);return x.protocol==='https:'||x.protocol==='http:'}catch(e){return false}}
+function qRender(){
+  const L=qLinks();
+  $$('.drop-w').forEach(w=>{const f=$('.drop',w).dataset.f,u=L[f],q=$('[data-q]',w);
+    if(u&&qGueltig(u)){let h='';try{h=new URL(u).host}catch(e){}
+      q.innerHTML=`<button type="button" class="q-auf" data-q-auf="${f}" title="${esc(u)}">Query öffnen ↗</button><button type="button" data-q-edit="${f}" aria-label="Link ändern" title="Link ändern">✎</button><span class="q-host">${esc(h)}</span>`;}
+    else q.innerHTML=`<button type="button" data-q-edit="${f}">+ Query-Link</button>`;});
+}
+function qDialog(f){Q_WAHL=f;$('#linkTitel').textContent='Query-Link · '+Q_NAME[f];$('#linkUrl').value=qLinks()[f]||'';$('#dlgLink').showModal();setTimeout(()=>$('#linkUrl').focus(),30)}
+function qBinden(){
+  $('.files').addEventListener('click',e=>{
+    const a=e.target.closest('[data-q-auf]'),ed=e.target.closest('[data-q-edit]');
+    if(a){e.preventDefault();const u=qLinks()[a.dataset.qAuf];if(u&&qGueltig(u))window.open(u,'_blank','noopener,noreferrer');}
+    else if(ed){e.preventDefault();qDialog(ed.dataset.qEdit);}
+  });
+  $('#linkSave').onclick=()=>{const u=$('#linkUrl').value.trim();
+    if(u&&!qGueltig(u)){toast('Bitte eine http(s)-Adresse eingeben');return}
+    const L=qLinks();if(u)L[Q_WAHL]=u;else delete L[Q_WAHL];lsSet(LS_Q,L);$('#dlgLink').close();qRender();toast(u?'Query-Link gespeichert':'Query-Link entfernt')};
+  $('#linkDel').onclick=()=>{const L=qLinks();delete L[Q_WAHL];lsSet(LS_Q,L);$('#dlgLink').close();qRender();toast('Query-Link entfernt')};
+  $('#linkUrl').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#linkSave').click()}});
+  $('#dlgLink [data-close]').onclick=()=>$('#dlgLink').close();
+  window.addEventListener('storage',e=>{if(e.key===LS_Q)qRender()});
+  qRender();
+}
 function bind(){
+  qBinden();
   $$('.drop').forEach(d=>{
     const inp=$('input',d);inp.onchange=()=>inp.files[0]&&takeFiles(inp.files,d.dataset.f).then(()=>inp.value='');
     d.ondragover=e=>{e.preventDefault();d.classList.add('over')};d.ondragleave=()=>d.classList.remove('over');
