@@ -528,8 +528,6 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
       <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M8.5 12.2l2.4 2.4 4.8-5.2"/></svg></button>
     <button class="dock-btn" type="button" data-g="lead" data-label="Durchlaufzeiten" data-acc="#8FB8E8" data-acc-hell="#3F6FCB" aria-label="Durchlaufzeiten">
       <svg viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7"/><path d="M12 10v3.5l2.4 1.6M9.5 3.5h5M12 3.5v3"/></svg></button>
-    <button class="dock-btn" type="button" data-g="fc" data-label="Forecast" data-acc="#D9A86C" data-acc-hell="#A56B2F" aria-label="Forecast">
-      <svg viewBox="0 0 24 24"><path d="M3.5 18.5l5.5-6 4 3.5 7-8"/><path d="M15 8h5v5"/></svg></button>
     <button class="dock-btn" type="button" data-g="qa" data-label="Prüfung" data-acc="#B79CF2" data-acc-hell="#7552C9" aria-label="Prüfung">
       <svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5M8 10.6l1.8 1.8 3.2-3.4"/></svg></button>
   </div>
@@ -1292,7 +1290,7 @@ WBTor({
   "merkmale": [
     "Issues, Workitems und gebuchten Aufwand aus Excel einlesen",
     "Plan/Ist je Monat und Jahr, Defekte, Anteile je Abteilung",
-    "Durchlaufzeiten je Präfix und Current Forecast",
+    "Durchlaufzeiten je Präfix",
     "Tabellen nach Excel kopieren"
   ],
   "nach": "",
@@ -1739,8 +1737,7 @@ const SORTS={
   overrun:{def:'d',opts:[['d','Überschreitung'],['q','Ist/Plan'],['b','Abgerechnet'],['p','Geplant'],['id','ID',1],['a','Assignee',1]]},
   wiAsg:{def:'h',opts:[['h','Aufwand'],['n','Anzahl'],['c','closed'],['a','Name',1],['dept','Abteilung',1]]},
   onTime:{def:'n',opts:[['n','Anzahl closed'],['q','Quote pünktlich'],['late','verspätet'],['dl','Ø Verzug'],['a','Name',1]]},
-  leadPrefix:{def:'n',opts:[['n','Anzahl'],['med','Median'],['avg','Durchschnitt'],['p85','85-%-Wert'],['max','Maximum'],['label','Präfix',1]]},
-  forecast:{def:'d',dd:1,opts:[['d','Differenz'],['h','Offener Aufwand'],['u','Auslastung'],['wk','Reichweite'],['n','Offene WI'],['od','überfällig'],['a','Name',1],['dept','Abteilung',1]]}
+  leadPrefix:{def:'n',opts:[['n','Anzahl'],['med','Median'],['avg','Durchschnitt'],['p85','85-%-Wert'],['max','Maximum'],['label','Präfix',1]]}
 };
 const SORTST=lsGet('wb-ausw-sort',{}),PENDSORT={};
 const istText=(id,k)=>!!SORTS[id]?.opts.find(o=>o[0]===k)?.[2];
@@ -1798,10 +1795,9 @@ const REPORTS=[
  {id:'leadPrefix',grp:'lead',wide:true,title:'Durchlaufzeit nach Präfix',sub:()=>'Präfix = '+prefixTxt()+' · '+yearTxt('Abschluss'),render:rLeadPrefix},
  {id:'leadTrend',grp:'lead',title:'Durchlaufzeit im Verlauf',sub:()=>'Median und Durchschnitt je Abschlussmonat',render:rLeadTrend},
  {id:'leadDist',grp:'lead',title:'Verteilung der Durchlaufzeit',sub:()=>'Anzahl Workitems je Zeitspanne',render:rLeadDist},
- {id:'forecast',grp:'fc',wide:true,title:'Current Forecast',sub:()=>'Offene Workitems (nicht closed, nicht canceled) je Assignee gegen Wochenarbeitszeit · Jahresfilter gilt hier nicht',render:rForecast},
  {id:'quality',grp:'qa',wide:true,title:'Datenqualität',sub:()=>'Was beim Zusammenführen auffällt · Buchungen: '+(CFG.bkDup==='summe'?'alle Zeilen je ID summiert':'je ID zählt nur die erste Zeile'),render:rQuality}
 ];
-const GROUPS={issues:['Issues','Geplanter und abgerechneter Aufwand'],wi:['Workitems','Aufwand, Anteile, Termine'],lead:['Durchlaufzeiten','Start bzw. Submit bis Abschluss'],fc:['Forecast','Was gerade offen liegt'],qa:['Prüfung','Fehlende und unstimmige Daten']};
+const GROUPS={issues:['Issues','Geplanter und abgerechneter Aufwand'],wi:['Workitems','Aufwand, Anteile, Termine'],lead:['Durchlaufzeiten','Start bzw. Submit bis Abschluss'],qa:['Prüfung','Fehlende und unstimmige Daten']};
 const yearTxt=(w)=>FILT.year==='all'?'Alle Jahre':(w?w+' ':'')+FILT.year;
 const wiDateTxt=()=>$('#fWiDate').selectedOptions[0].text;
 
@@ -1951,21 +1947,6 @@ function rLeadDist(c){
   vbars(c.chart,rows.map(r=>r.b),[{name:'Workitems',color:'var(--c3)',vals:rows.map(r=>r.n)}],{fmt:v=>nf0.format(v),valLabels:true,short:v=>nf0.format(v),h:210,tipTitle:i=>rows[i].b+' Tage',extraTip:i=>tipRow('','Anteil',fp(rows[i].p))});
   c.table(table(c.id,[{k:'b',l:'Tage',sv:r=>r.i},{k:'n',l:'Anzahl',n:1},{k:'p',l:'Anteil',n:1,f:v=>fp(v)}],rows));
 }
-function rForecast(c){
-  c.ctl.innerHTML=`<span class="inline-ctl">Horizont <select class="sel" data-l="horizon"><option value="1">1 Woche</option><option value="2">2 Wochen</option><option value="4">4 Wochen</option><option value="8">8 Wochen</option><option value="13">Quartal</option></select></span>`;
-  const today=Date.now(),M=new Map();
-  for(const w of D.wis){if(w.sc!=='open'||!asgOk(w.assignee))continue;if(!M.has(w.assignee))M.set(w.assignee,{a:w.assignee,n:0,h:0,od:0,noest:0});const o=M.get(w.assignee);o.n++;o.h+=w.est;if(!w.est)o.noest++;if(w.planned!=null&&w.planned<today)o.od++}
-  const hz=+LOCAL.horizon;
-  const rows=[...M.values()].map(r=>{const wh=whOf(r.a),cap=wh*hz;return Object.assign(r,{dept:deptName(r.a)||klammer(r.a),wh,cap,d:cap-r.h,wk:wh?r.h/wh:null,u:cap?r.h/cap:null})});sortiere(c,rows);
-  c.top.innerHTML=legend([{name:'Offener Aufwand',color:'var(--c2)',fix:1},{name:'über Kapazität',color:'var(--c4)',fix:1},{name:'Kapazität ('+(hz===1?'1 Woche':hz+' Wochen')+')',color:'var(--text)',shape:'ln',fix:1}]);
-  bullet(c.chart,rows.map(r=>({label:r.a,load:r.h,cap:r.cap,n:r.n})));
-  const S={a:'Summe',n:0,h:0,wh:0,cap:0,d:0,od:0};rows.forEach(r=>{S.n+=r.n;S.h+=r.h;S.wh+=r.wh;S.cap+=r.cap;S.d+=r.d;S.od+=r.od});S.wk=S.wh?S.h/S.wh:null;S.u=S.cap?S.h/S.cap:null;
-  c.table(table(c.id,[{k:'a',l:'Assignee'},{k:'dept',l:'Abteilung'},{k:'n',l:'Offene WI',n:1},{k:'h',l:'Offener Aufwand h',n:1,f:v=>nf1.format(v)},
-    {k:'wh',l:'Wochenstd.',n:1,html:r=>`<input class="wh" inputmode="decimal" data-p="${esc(r.a)}" value="${esc(String(CFG.people[r.a]?.wh||''))}" placeholder="${esc(String(CFG.weekly))}" aria-label="Wochenstunden ${esc(r.a)}">`,csv:r=>r.wh},
-    {k:'cap',l:'Kapazität h',n:1,f:v=>nf1.format(v)},{k:'d',l:'Differenz h',n:1,f:v=>(v>=0?'+':'−')+nf1.format(Math.abs(v)),cls:r=>r.d<0?'neg':'pos'},
-    {k:'u',l:'Auslastung',n:1,f:v=>fp(v),sv:r=>r.u??0},{k:'wk',l:'Reichweite Wo.',n:1,f:v=>v==null?'–':nf1.format(v),sv:r=>r.wk??0},{k:'od',l:'überfällig',n:1},{k:'noest',l:'ohne Schätzung',n:1}],rows,{sum:S}));
-  c.tableOpen=true;
-}
 function rQuality(c){
   const items=[];
   const n=D.full.bks.length,cnt=k=>D.full.bks.filter(b=>b.how===k),hs=a=>a.reduce((s,b)=>s+b.h,0);
@@ -2025,7 +2006,6 @@ const INFO={
  leadPrefix:()=>[['Rechnung',leadTxt()],['Präfix',prefixTxt()+'.'],['Werte','Ø Durchschnitt, Median (Mitte), Quartile 25–75 % (Balken), 85-%-Wert. min. n blendet seltene Präfixe aus.'],['Filter','Jahr (nach Abschluss), Assignee.']],
  leadTrend:()=>[['Rechnung',leadTxt()],['Gruppe','Monat des Abschlusses; je Monat Median und Durchschnitt.'],['Filter','Präfix-Auswahl hier, Jahr, Assignee.']],
  leadDist:()=>[['Rechnung',leadTxt()],['Gruppe','Anzahl Workitems je Zeitspanne in Tagen.'],['Filter','Präfix aus „Durchlaufzeit im Verlauf“, Jahr, Assignee.']],
- forecast:()=>[['Offen',offenTxt()],['Aufwand','Summe Estimated Effort (Spalte '+CFG.map.wi.est+') der offenen Workitems je Assignee.'],['Kapazität','Wochenstunden × Horizont. Standard '+nf1.format(+CFG.weekly)+' h, je Person in der Tabelle änderbar.'],['Differenz','Kapazität − offener Aufwand; negativ = Überlast.'],['Reichweite','Offener Aufwand ÷ Wochenstunden, in Wochen.'],['Überfällig','Geplantes Datum vor heute.'],['Filter','Assignee. Der Jahresfilter gilt hier nicht.']],
  quality:()=>[['Zweck','Zeigt, was beim Zusammenführen der drei Dateien nicht passt. Ausgeblendete Einträge zählen hier mit.'],['Abgleich','Buchung → Issue: erst exakt, '+(CFG.idMatch==='exakt'?'sonst keine Zuordnung.':'dann trotz Schreibweise (Groß/klein, Leer-/Sonderzeichen), zuletzt über eine eindeutige Nummer.')],['Doppelte IDs',CFG.bkDup==='summe'?'Alle Zeilen werden summiert.':'Nur die erste Zeile zählt, die übrigen stehen hier als „ignoriert“.']]
 };
 function infoHtml(id){const f=INFO[id];if(!f)return '';try{return f().map(([k,v])=>`<span><i>${esc(k)}</i><em>${esc(v)}</em></span>`).join('')}catch(e){return ''}}
@@ -2070,15 +2050,6 @@ const kpiSatz={
     return [['Median',L?fd(L.med):'–',L?'Hälfte schneller als das':yearTxt('Abschluss')],['Durchschnitt',L?fd(L.avg):'–',L?'Spanne '+nf1.format(L.min)+' – '+fd(L.max):''],
       ['85 %-Wert',L?fd(L.p85):'–','85 % sind schneller'],['Abgeschlossen',nf0.format(L?L.n:0),yearTxt('Abschluss')+' · Basis '+(LOCAL.leadBasis==='submit'?'Submit':'Start')],
       ['Schnellstes Präfix',f?esc(f[0]):'–',f?'Median '+fd(f[1])+' · n '+f[2]:''],['Langsamstes Präfix',l?esc(l[0]):'–',l?'Median '+fd(l[1])+' · n '+l[2]:'',!!l&&!!L&&l[1]>L.med*1.5]];
-  },
-  fc(){
-    const hz=+LOCAL.horizon,M=new Map(),today=Date.now();let n=0,h=0,od=0,noe=0;
-    for(const w of D.wis){if(w.sc!=='open'||!asgOk(w.assignee))continue;n++;h+=w.est;if(!w.est)noe++;if(w.planned!=null&&w.planned<today)od++;M.set(w.assignee,(M.get(w.assignee)||0)+w.est)}
-    let cap=0,ueb=0;for(const [a,l] of M){const c=whOf(a)*hz;cap+=c;if(l>c)ueb++}
-    const d=cap-h;
-    return [['Offene Workitems',nf0.format(n),'nicht „'+CFG.closed+'“, nicht „'+CFG.canceled+'“'],['Offener Aufwand',fh(h),noe?nf0.format(noe)+' ohne Schätzung':'alle geschätzt',noe>0],
-      ['Kapazität',fh(cap),(hz===1?'1 Woche':hz+' Wochen')+' · '+nf0.format(M.size)+' Personen'],['Differenz',(d>=0?'+':'−')+fh(Math.abs(d)),d<0?'Überlast':'frei',d<0],
-      ['Überlastet',nf0.format(ueb)+' von '+nf0.format(M.size),'Personen über Kapazität',ueb>0],['Überfällig',nf0.format(od),'geplantes Datum vor heute',od>0]];
   },
   qa(){
     const n=D.full.bks.length,zu=D.full.bks.filter(b=>b.iss).length,oh=n-zu,ohH=D.full.bks.filter(b=>!b.iss).reduce((a,b)=>a+b.h,0);
@@ -2209,15 +2180,11 @@ function lesekopie(){
     const F=D.full,jahr=new Date().getFullYear(),heute=Date.now();
     const iJ=F.issues.filter(i=>yOf(i.submit)===jahr);let plan=0,book=0;iJ.forEach(i=>{plan+=i.est;book+=i.booked});
     const dc=defCats();
-    const M=new Map();let offen=0,oh=0,od=0;
-    for(const w of F.wis){if(w.sc!=='open')continue;offen++;oh+=w.est;if(w.planned!=null&&w.planned<heute)od++;M.set(w.assignee,(M.get(w.assignee)||0)+w.est)}
-    const personen=[...M].map(([a,h])=>({a:String(a).replace(/\s*\([^()]*\)\s*$/,''),abt:klammer(a),h:Math.round(h*10)/10,cap:whOf(a)}))
-      .sort((x,y)=>y.h/y.cap-x.h/x.cap);
+    /* Seit 18.11.2026 kein Forecast mehr hier – der liegt im KapazitätenPlaner (Plan), die Auswertung bleibt beim Ist. */
     const lt=stats(F.wis.filter(w=>w.sc==='closed'&&w.actual!=null&&yOf(w.actual)===jahr).map(w=>{const v=w.start??w.submit;return v==null?null:(w.actual-v)/DAY}).filter(x=>x!=null&&x>=0));
     const zu=F.bks.filter(b=>b.iss).length;
     const d={v:1,zeit:new Date().toISOString(),jahr,dateien:{iss:RAW.iss?.name||'',wi:RAW.wi?.name||'',bk:RAW.bk?.name||''},
       issues:{n:iJ.length,defekte:iJ.filter(i=>dc.has(i.cat)).length,plan:Math.round(plan),book:Math.round(book)},
-      forecast:{offen,h:Math.round(oh),ueberfaellig:od,n:personen.length,ueberlastet:personen.filter(p=>p.h>p.cap).length,personen:personen.slice(0,8)},
       lead:lt?{med:Math.round(lt.med*10)/10,avg:Math.round(lt.avg*10)/10,n:lt.n}:null,
       zuordnung:F.bks.length?Math.round(zu/F.bks.length*1000)/10:null};
     localStorage.setItem(LESEKOPIE,JSON.stringify(d));wbMelden('auswertung');
@@ -2577,7 +2544,6 @@ function bind(){
   $('#reports').addEventListener('change',e=>{
     const so=e.target.closest('select[data-sort]');if(so){sortSetzen(so.dataset.sort,so.value);return}
     const s=e.target.closest('select[data-l]');if(s){LOCAL[s.dataset.l]=s.value;const id=s.closest('[data-r]').dataset.r;rerender(s.dataset.l==='trendPrefix'?['leadTrend','leadDist']:s.dataset.l==='leadBasis'?['leadPrefix','leadTrend','leadDist']:[id])}
-    const w=e.target.closest('input.wh');if(w){const p=w.dataset.p;CFG.people[p]=CFG.people[p]||{};CFG.people[p].wh=w.value.trim();lsSet(LS.cfg,CFG);rerender(['forecast']);lesekopie()}
   });
   $('#reports').addEventListener('toggle',e=>{const d=e.target;if(!d.matches?.('details.tbl'))return;const id=d.dataset.d;if(d.open){OPEN.add(id);OPEN.delete('!'+id)}else{OPEN.delete(id);OPEN.add('!'+id)}lsSet(LS.open,[...OPEN])},true);
   // Wischen zwischen den Kategorien (Touch), nicht in Tabellen und Diagrammen mit eigener Bewegung
