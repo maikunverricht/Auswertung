@@ -1312,7 +1312,7 @@ WBTor({
   "titel": "Auswertung freischalten",
   "merkmale": [
     "Issues, Workitems und gebuchten Aufwand aus Excel einlesen",
-    "Plan/Ist je Monat und Jahr, Defekte, Anteile je Abteilung",
+    "Aufwand geplant vs. gebucht je Monat und Jahr, Defekte, Anteile je Abteilung",
     "Durchlaufzeiten je Präfix",
     "Tabellen nach Excel kopieren"
   ],
@@ -1809,7 +1809,7 @@ const REPORTS=[
  {id:'issYear',grp:'issues',title:'Issues pro Jahr',sub:()=>'Geplant und abgerechnet, gesamt und Defekte',render:rIssYear},
  {id:'issAsg',grp:'issues',title:'Issue-Aufwand pro Assignee',sub:()=>yearTxt()+' · geplant gegen abgerechnet',render:rIssAsg},
  {id:'issSub',grp:'issues',title:'Issues je Submitter',sub:()=>yearTxt()+' · wer wie viele Issues anlegt (Spalte '+CFG.map.iss.submitter+')',render:rIssSub},
- {id:'overrun',grp:'issues',title:'Plan/Ist-Abweichung je Issue',sub:()=>yearTxt()+' · größte Überschreitungen zuerst',render:rOverrun},
+ {id:'overrun',grp:'issues',title:'Aufwand geplant vs. gebucht je Issue',sub:()=>yearTxt()+' · größte Überschreitungen zuerst · Termine gegen Planungsstand: KapazitätenPlaner',render:rOverrun},
  {id:'defLat',grp:'issues',title:'Defekt-Entdeckungszeit',sub:()=>'Tage von Defekt-Injektion bis Submit, je Jahr des Submits',render:rDefLat},
  {id:'wiYear',grp:'wi',title:'Workitem-Aufwand pro Jahr',sub:()=>'Estimated Effort, Jahr nach '+wiDateTxt(),render:rWiYear},
  {id:'wiDept',grp:'wi',title:'Anteil pro Abteilung pro Jahr',sub:()=>'Abteilung aus: '+$('#fDept').selectedOptions[0].text,render:rWiDept},
