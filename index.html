@@ -2097,6 +2097,20 @@ function renderAll(){
   syncGroups();renderKpis();
   for(const r of REPORTS)if(sichtbar(r))renderCard(r);
   renderAns();
+  lesekopieSchreiben();
+}
+/* Lesekopie seit 19.11.2026 – Bugstatistik je Jahr fuer den Contribution Dialog (Buero).
+   Nur Zahlen, keine Namen. Gilt fuer die aktuellen Filter (Assignee). */
+function lesekopieSchreiben(){
+  try{
+    if(!D||!D.issues||!D.issues.length){localStorage.removeItem('wb-ausw-stand');return}
+    const dc=defCats(),Y=new Map(),g=y=>{if(!Y.has(y))Y.set(y,{jahr:y,issues:0,defekte:0,offen:0,geplant:0,abger:0});return Y.get(y)};
+    const zu=s=>/clos|done|resolv|reject|cancel|abgeschl|geschlossen|erledigt/i.test(String(s||''));
+    for(const i of D.issues){if(!asgOk(i.assignee))continue;const y=yOf(issDate(i));if(y==null)continue;const o=g(y);o.issues++;
+      if(dc.has(i.cat)){o.defekte++;o.geplant+=i.est||0;o.abger+=i.booked||0;if(!zu(i.state))o.offen++}}
+    const jahre=[...Y.values()].sort((a,b)=>a.jahr-b.jahr).map(o=>({...o,geplant:Math.round(o.geplant*10)/10,abger:Math.round(o.abger*10)/10}));
+    localStorage.setItem('wb-ausw-stand',JSON.stringify({quelle:'auswertung',updated:new Date().toISOString(),kategorien:[...dc],jahre}));
+  }catch(e){}
 }
 function renderCard(r){
   const el=$(`[data-r="${r.id}"]`);if(!el)return;
