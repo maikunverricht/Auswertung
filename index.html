@@ -553,7 +553,7 @@ html[data-theme="light"] .wipe{mix-blend-mode:multiply}
 </nav>
 <footer class="pf"><span>Auswertung · Werkbank Unverricht</span><span id="footInfo">Daten bleiben lokal im Browser</span></footer>
 
-<div id="tip" role="tooltip"></div>
+<div id="tip" role="tooltip" aria-label="Wert im Diagramm"></div>
 <div id="ausPop" class="aus-pop" hidden></div>
 <div class="toast" id="toast"></div>
 
@@ -2714,6 +2714,7 @@ function bind(){
       if (ak && ak.id && kp && Array.isArray(kp.auftraege)) au = kp.auftraege.filter(function(a){ return a.id === ak.id; })[0] || null;
       if (au && s.kp && au.schritte && au.schritte[s.kp]) st = au.schritte[s.kp].status || '';
       var w = WEITER[k] && S[WEITER[k]], f = FARBE[st];
+      el.setAttribute('aria-label', 'Prozessschritt ' + marke(s));
       var key = [k, ak && ak.id, ak && ak.titel, st, w && w.name].join('|'); if (key === letzt) return; letzt = key;
       var href = w && w.id && REPO[w.id] ? '../' + REPO[w.id] + '/' + (w.id === 'anforderungsbuch' && w.tab ? '#' + w.tab : '') : '';
       el.innerHTML =
