@@ -1670,11 +1670,11 @@ function stack100(el,rows,keys,o={}){
     keys.forEach((k,j)=>{
       const v=r.parts[k.k]||0;if(v<=0)return;const sw=v/tot*pw;const ww=Math.max(0,sw-2);
       const aa=o.aus&&k.k!=='__rest'?[o.aus,k.k]:null;
-      s+=`<rect x="${x}" y="${yb}" width="${ww}" height="${bh}" rx="3" style="fill:${k.color}${aa?';cursor:pointer':''}"${ausAttr(aa)} data-tip="${tip(`<b>${esc(r.label)} · ${esc(k.name)}</b>`+tipRow(k.color,'Anteil',fp(v/tot))+tipRow('','Aufwand',fh(v))+ausHint(aa))}"/>`;
+      s+=`<rect x="${x}" y="${yb}" width="${ww}" height="${bh}" rx="3" style="fill:${k.color}${aa?';cursor:pointer':''}"${ausAttr(aa)} data-tip="${tip(`<b>${esc(r.label)} · ${esc(k.name)}</b>`+tipRow(k.color,'Anteil',fp(v/tot))+(o.anzahl?tipRow('','Anzahl',nf0.format(v)):tipRow('','Aufwand',fh(v)))+ausHint(aa))}"/>`;
       if(ww>42)s+=`<text x="${x+ww/2}" y="${yb+bh/2+3.5}" text-anchor="middle" style="fill:var(--void);font-weight:600">${nf0.format(v/tot*100)}%</text>`;
       x+=sw;
     });
-    s+=`<text class="val" x="${w-4}" y="${y0+rh/2+3.5}" text-anchor="end">${fax(r.total)} h</text>`;
+    s+=`<text class="val" x="${w-4}" y="${y0+rh/2+3.5}" text-anchor="end">${o.anzahl?nf0.format(r.total):fax(r.total)+' h'}</text>`;
   });
   s+='</svg>';el.innerHTML=s;
 }
@@ -1752,6 +1752,7 @@ const SORTS={
   defMon:{def:'k',opts:[['k','Monat',1],['p','Geplant'],['b','Abgerechnet'],['d','Differenz'],['n','Anzahl Issues']]},
   issYear:{def:'y',dd:1,opts:[['y','Jahr'],['p','Geplant'],['b','Abgerechnet'],['dp','Defekt geplant'],['db','Defekt abgerechnet'],['n','Anzahl Issues']]},
   defLat:{def:'y',dd:1,opts:[['y','Jahr'],['avg','Durchschnitt'],['med','Median'],['n','Anzahl']]},
+  defHerk:{def:'_s',dd:-1,opts:[['_s','Jahr'],['n','Anzahl']]},
   wiYear:{def:'y',dd:1,opts:[['y','Jahr'],['h','Aufwand'],['n','Anzahl'],['hc','closed'],['ho','offen']]},
   wiDept:{def:'t',opts:[['t','Gesamtaufwand'],['d','Abteilung',1]]},
   leadDist:{def:'i',dd:1,opts:[['i','Zeitspanne'],['n','Anzahl']]},
@@ -1810,6 +1811,7 @@ const REPORTS=[
  {id:'issAsg',grp:'issues',title:'Issue-Aufwand pro Assignee',sub:()=>yearTxt()+' · geplant gegen abgerechnet',render:rIssAsg},
  {id:'issSub',grp:'issues',title:'Issues je Submitter',sub:()=>yearTxt()+' · wer wie viele Issues anlegt (Spalte '+CFG.map.iss.submitter+')',render:rIssSub},
  {id:'overrun',grp:'issues',title:'Aufwand geplant vs. gebucht je Issue',sub:()=>yearTxt()+' · größte Überschreitungen zuerst · Termine gegen Planungsstand: KapazitätenPlaner',render:rOverrun},
+ {id:'defHerk',grp:'issues',title:'Defekte nach Herkunftsjahr',sub:()=>FILT.year==='all'?'Je Fundjahr (Submit): aus welchem Jahr die Defekte stammen (Defekt-Injektion)':'Gefunden '+FILT.year+' (Submit) – aus welchem Jahr sie stammen (Defekt-Injektion)',render:rDefHerk},
  {id:'defLat',grp:'issues',title:'Defekt-Entdeckungszeit',sub:()=>'Tage von Defekt-Injektion bis Submit, je Jahr des Submits',render:rDefLat},
  {id:'wiYear',grp:'wi',title:'Workitem-Aufwand pro Jahr',sub:()=>'Estimated Effort, Jahr nach '+wiDateTxt(),render:rWiYear},
  {id:'wiDept',grp:'wi',title:'Anteil pro Abteilung pro Jahr',sub:()=>'Abteilung aus: '+$('#fDept').selectedOptions[0].text,render:rWiDept},
@@ -1877,6 +1879,40 @@ function rOverrun(c){
   hbars(c.chart,top.map(r=>({aus:['iss',r.id],label:r.id+' '+r.t,vals:[{v:r.d,color:'var(--c4)',name:'Überschreitung'}],text:'+'+fh(r.d),tip:`<b>${esc(r.id)}</b><div style="color:var(--text-2);margin-bottom:4px">${esc(r.t)}</div>`+tipRow(H.c,H.l,fh(r.p))+tipRow(B.c,B.l,fh(r.b))+tipRow('','Assignee',r.a)})),{lw:220});
   if(!top.length)c.chart.innerHTML='<div class="empty">Keine Überschreitungen</div>';
   c.table(table(c.id,[{k:'id',l:'ID'},{k:'t',l:'Titel',html:r=>`<div class="trunc" title="${esc(r.t)}">${esc(r.t)}</div>`},{k:'a',l:'Assignee'},{k:'c',l:'Kategorie'},{k:'s',l:'State'},{k:'p',l:'Geplant h',n:1,f:v=>nf1.format(v)},{k:'b',l:'Abger. h',n:1,bk:1,f:v=>nf1.format(v)},{k:'d',l:'Δ h',n:1,f:v=>(v>0?'+':'')+nf1.format(v),cls:r=>r.d>0?'neg':''},{k:'q',l:'Ist/Plan',n:1,bk:1,f:v=>fp(v),sv:r=>r.q??0}],rows,{limit:300}));
+}
+/* Seit 24.11.2026 (Maik): "Wenn ich ein Jahr wähle, welche Defekte aus welchem Jahr
+   gefunden wurden – 2026 gewählt: wie viele aus 2026, wie viele aus 2025, …".
+   Fundjahr = Submit, Herkunftsjahr = Defekt-Injektion. Mit „Alle Jahre“ je Fundjahr ein
+   Balken, geteilt nach Alter (gleiches Jahr, Vorjahr, …). */
+function rDefHerk(c){
+  const dc=defCats(),def=[];
+  for(const i of D.issues){if(!dc.has(i.cat)||!asgOk(i.assignee)||i.submit==null)continue;
+    const fy=yOf(i.submit),hy=i.inj!=null?yOf(i.inj):null;def.push({fy,hy,tage:i.inj!=null?(i.submit-i.inj)/DAY:null})}
+  if(FILT.year!=='all'){
+    const Y=+FILT.year,M=new Map();
+    for(const d of def){if(d.fy!==Y)continue;const k=d.hy==null?'ohne':String(d.hy);if(!M.has(k))M.set(k,{y:k,n:0,t:[]});const o=M.get(k);o.n++;if(d.tage!=null&&d.tage>=0)o.t.push(d.tage)}
+    const ges=[...M.values()].reduce((a,o)=>a+o.n,0);
+    let rows=[...M.values()].map(o=>({y:o.y,n:o.n,a:ges?o.n/ges:0,avg:o.t.length?o.t.reduce((a,b)=>a+b,0)/o.t.length:null,
+      alt:o.y==='ohne'?'ohne Injektionsdatum':(Y-(+o.y)===0?'gleiches Jahr':Y-(+o.y)===1?'Vorjahr':(Y-(+o.y))+' Jahre davor')}));
+    rows=sortiere(c,rows.map(r=>Object.assign(r,{_s:r.y==='ohne'?-1:+r.y})));
+    c.top.innerHTML=legend([{name:'Defekte gefunden '+Y,color:'var(--c3)'}]);
+    if(!rows.length){c.chart.innerHTML='<div class="empty">Keine Defekte mit Submit '+Y+'</div>'}
+    else vbars(c.chart,rows.map(r=>r.y==='ohne'?'ohne Datum':r.y),[{name:'Defekte gefunden '+Y,color:'var(--c3)',vals:rows.map(r=>r.n)}],{valLabels:true,h:210,fmt:v=>nf0.format(v),extraTip:i=>tipRow('','Anteil',fp(rows[i].a))+tipRow('','Herkunft',esc(rows[i].alt))});
+    c.table(table(c.id,[{k:'y',l:'Herkunftsjahr',f:v=>v==='ohne'?'ohne Datum':v},{k:'alt',l:'Alter'},{k:'n',l:'Defekte',n:1},{k:'a',l:'Anteil',n:1,f:v=>fp(v)},{k:'avg',l:'Ø Tage bis Fund',n:1,f:v=>v==null?'–':nf1.format(v)}],rows));
+    return;
+  }
+  const KL=[{k:'0',name:'gleiches Jahr',color:'var(--c1)'},{k:'1',name:'Vorjahr',color:'var(--c2)'},{k:'2',name:'2 Jahre davor',color:'var(--c3)'},{k:'3',name:'älter',color:'var(--c4)'},{k:'x',name:'ohne Injektionsdatum',color:'var(--line-strong)'}];
+  const F=new Map(),hjs=new Set();
+  for(const d of def){if(!F.has(d.fy))F.set(d.fy,{parts:{},n:0,abs:{}});const o=F.get(d.fy);o.n++;
+    const k=d.hy==null?'x':String(Math.min(3,Math.max(0,d.fy-d.hy)));o.parts[k]=(o.parts[k]||0)+1;
+    const hk=d.hy==null?'ohne':String(d.hy);hjs.add(hk);o.abs[hk]=(o.abs[hk]||0)+1}
+  const fys=[...F.keys()].sort((a,b)=>b-a);
+  c.top.innerHTML=legend(KL);
+  if(!fys.length){c.chart.innerHTML='<div class="empty">Keine Defekte mit Submit-Datum</div>'}
+  else stack100(c.chart,fys.map(y=>({label:String(y),parts:F.get(y).parts,total:F.get(y).n})),KL,{anzahl:true});
+  const hl=[...hjs].sort((a,b)=>a==='ohne'?1:b==='ohne'?-1:b-a);
+  const cols=[{k:'y',l:'Fundjahr'},{k:'n',l:'Defekte',n:1}].concat(hl.map(h=>({k:'h'+h,l:'aus '+(h==='ohne'?'?':h),n:1,f:v=>v?nf0.format(v):'–'})));
+  c.table(table(c.id,cols,sortiere(c,fys.map(y=>{const o=F.get(y),r={y:String(y),_s:y,n:o.n};hl.forEach(h=>r['h'+h]=o.abs[h]||0);return r}))));
 }
 function rDefLat(c){
   const dc=defCats(),Y=new Map();
@@ -2021,6 +2057,7 @@ const INFO={
  issAsg:()=>[['Geplant','Estimated Effort der Issues je Assignee (Spalte '+CFG.map.iss.assignee+').'],['Abgerechnet',bookTxt()],['Zuordnung',asgTxt()],['Anzeige','Grafik: die 15 mit dem meisten abgerechneten Aufwand. Tabelle: alle.'],['Filter','Jahr, Assignee.']],
  issSub:()=>[['Rechnung','Anzahl Issues je Submitter (Datei 1, Spalte '+CFG.map.iss.submitter+'), getrennt nach Defekten ('+defTxt()+') und sonstigen.'],['Anteil','Issues der Person ÷ alle gezählten Issues.'],['Selbst','Issues, bei denen Submitter und Assignee dieselbe Person sind.'],['Jahr nach',issD()+'.'],['Filter','Jahr. Assignee-Filter und Ausblenden wirken hier auf den Submitter.']],
  overrun:()=>[['Rechnung','Je Issue: gesamter abgerechneter Aufwand minus Estimated Effort. Positiv = überschritten.'],['Abgerechnet',bookTxt()],['Anzeige','Grafik: die 10 größten Überschreitungen. Tabelle: alle Issues mit Plan oder Ist.'],['Filter','Jahr (nach '+issD()+'), Assignee.']],
+  defHerk:()=>[['Auswahl','Defekte = Issues der Kategorie (Spalte '+CFG.map.iss.cat+'): '+defTxt()+'.'],['Fundjahr','Jahr des Submit-Datums (Spalte '+CFG.map.iss.submit+'). Mit gewähltem Jahr nur Defekte, die in diesem Jahr gefunden wurden.'],['Herkunftsjahr','Jahr der Defekt-Injektion (Spalte '+CFG.map.iss.inj+'); fehlt sie, „ohne Datum“.']],
  defLat:()=>[['Rechnung','Je Defekt: Submit-Datum (Spalte '+CFG.map.iss.submit+') minus Defekt-Injektions-Datum (Spalte '+CFG.map.iss.inj+'), in Kalendertagen.'],['Auswahl','Issues der Kategorie '+defTxt()+' mit beiden Daten; negative Abstände fallen weg.'],['Gruppe','Jahr des Submits. Je Jahr Durchschnitt, Median, 85-%-Wert und Maximum.'],['Filter','Assignee. Zeigt immer alle Jahre.']],
  wiYear:()=>[['Rechnung','Summe Estimated Effort (Datei 2, Spalte '+CFG.map.wi.est+') je Jahr.'],['Jahr nach',wiDTxt()+'.'],['Aufteilung','Gesamt enthält closed, offene und canceled; die Tabelle zeigt sie getrennt.'],['Filter','Assignee, Workitem-Datum. Zeigt immer alle Jahre.']],
  wiDept:()=>[['Rechnung','Anteil der Abteilung am Estimated Effort aller Workitems eines Jahres; canceled zählt nicht.'],['Abteilung',FILT.dept==='klammer'?'aus der Klammer im Assignee (Spalte '+CFG.map.wi.assignee+'), z. B. „Max Muster (EDS-SW3)“ → EDS-SW3. Ohne Klammer: „(ohne Abteilung)“.':FILT.dept==='map'?'aus der Zuordnung Person → Abteilung unter Einstellungen, sonst aus der Klammer im Assignee.':'aus Spalte '+CFG.map.wi[FILT.dept]+' der Workitem-Datei.'],['Anzeige','Die 5 größten einzeln, der Rest als „Sonstige“.'],['Jahr nach',wiDTxt()+'.'],['Filter','Assignee.']],
